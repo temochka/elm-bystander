@@ -5,12 +5,13 @@ import Debug
 import Html exposing (Html, button, div, span, text)
 import Html.Events exposing (onClick)
 import Maze
+import Random
 import Svg
 import Svg.Attributes
 
 
 main =
-    Browser.sandbox { init = init, update = update, view = view }
+    Browser.element { init = init, update = update, subscriptions = subscriptions, view = view }
 
 
 
@@ -18,12 +19,19 @@ main =
 
 
 type alias Model =
-    Maze.Grid
+    { maze : Maze.Grid
+    , startPoint : Maybe Maze.Vertex
+    , endPoint : Maybe Maze.Vertex
+    }
 
 
-init : Model
-init =
-    Maze.new3x3
+init : () -> ( Model, Cmd Msg )
+init _ =
+    let
+        maze =
+            Maze.new 5 5
+    in
+    ( { maze = maze, startPoint = Nothing, endPoint = Nothing }, Random.generate SetStartAndEnd (Maze.carve maze) )
 
 
 
@@ -31,14 +39,27 @@ init =
 
 
 type Msg
-    = None
+    = UpdateMaze Maze.Grid
+    | SetStartAndEnd ( Maze.Vertex, Maze.Vertex )
 
 
-update : Msg -> Model -> Model
+update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        None ->
-            model
+        UpdateMaze maze ->
+            ( { model | maze = maze }, Cmd.none )
+
+        SetStartAndEnd ( start, end ) ->
+            Debug.log "Updated Model: " ( { model | startPoint = Just start, endPoint = Just end }, Cmd.none )
+
+
+
+-- SUBSCRIPTIONS
+
+
+subscriptions : Model -> Sub Msg
+subscriptions model =
+    Sub.none
 
 
 
@@ -46,19 +67,29 @@ update msg model =
 
 
 view : Model -> Html Msg
-view grid =
+view { maze, startPoint, endPoint } =
     let
         nodes =
             List.map
-                (\( row, col ) ->
+                (\(( row, col ) as point) ->
                     Svg.circle
                         [ Svg.Attributes.cx (String.fromInt (40 + 40 * col))
                         , Svg.Attributes.cy (String.fromInt (40 + 40 * row))
                         , Svg.Attributes.r "10"
+                        , Svg.Attributes.fill
+                            (if Maybe.map ((==) point) startPoint |> Maybe.withDefault False then
+                                "green"
+
+                             else if Maybe.map ((==) point) endPoint |> Maybe.withDefault False then
+                                "red"
+
+                             else
+                                "black"
+                            )
                         ]
                         []
                 )
-                (Maze.vertices grid)
+                (Maze.vertices maze)
 
         edges =
             List.map
@@ -72,7 +103,7 @@ view grid =
                         ]
                         []
                 )
-                (Maze.edges grid)
+                (Maze.edges maze)
     in
     Svg.svg
         [ Svg.Attributes.width "800"

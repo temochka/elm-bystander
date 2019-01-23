@@ -1,7 +1,8 @@
-module Maze exposing (Grid, edges, new3x3, vertices)
+module Maze exposing (Grid, Vertex, carve, edges, new, vertices)
 
 import Debug
 import Dict exposing (Dict)
+import Random
 
 
 type alias Grid =
@@ -17,6 +18,13 @@ type alias Vertex =
 
 type alias VertexId =
     Int
+
+
+type Direction
+    = North
+    | East
+    | South
+    | West
 
 
 type alias AdjacencyRecord =
@@ -35,15 +43,9 @@ type alias AdjacencyList =
     Dict VertexId AdjacencyRecord
 
 
-new3x3 : Grid
-new3x3 =
+new : Int -> Int -> Grid
+new width height =
     let
-        width =
-            3
-
-        height =
-            3
-
         cols =
             List.range 0 (width - 1)
 
@@ -139,3 +141,44 @@ edges { width, height, adjacencyList } =
         |> List.foldl reducer Dict.empty
         |> Dict.keys
         |> List.map (Tuple.mapBoth (vertexById width) (vertexById width))
+
+
+randomDirection =
+    Random.uniform North [ East, South, West ]
+
+
+randomStartPoint : AdjacencyList -> Random.Generator VertexId
+randomStartPoint adjacencyList =
+    adjacencyList
+        |> Dict.keys
+        |> Random.uniform -1
+
+
+randomEndPoint : AdjacencyList -> VertexId -> Random.Generator VertexId
+randomEndPoint adjacencyList startVertexId =
+    let
+        borders =
+            adjacencyList
+                |> Dict.keys
+                |> List.filter (\v -> Dict.get v adjacencyList |> Maybe.map isBorder |> Maybe.withDefault False)
+    in
+    borders
+        |> List.filter ((/=) startVertexId)
+        |> Random.uniform -1
+
+
+isBorder : AdjacencyRecord -> Bool
+isBorder { north, east, south, west } =
+    north == Nothing || east == Nothing || south == Nothing || west == Nothing
+
+
+carve : Grid -> Random.Generator ( Vertex, Vertex )
+carve { adjacencyList, width } =
+    let
+        visitedVertices : VisitedVertices
+        visitedVertices =
+            Dict.empty
+    in
+    randomStartPoint adjacencyList
+        |> Random.andThen (\startVertexId -> Random.map (Tuple.pair startVertexId) (randomEndPoint adjacencyList startVertexId))
+        |> Random.map (Tuple.mapBoth (vertexById width) (vertexById width))
