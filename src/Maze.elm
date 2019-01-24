@@ -1,8 +1,9 @@
-module Maze exposing (Grid, Vertex, carve, edges, new, vertices)
+module Maze exposing (Game, Grid, Vertex, edges, makeGame, new, vertices)
 
 import Debug
 import Dict exposing (Dict)
 import Random
+import Random.List
 
 
 type alias Grid =
@@ -32,6 +33,13 @@ type alias AdjacencyRecord =
     , east : Maybe VertexId
     , south : Maybe VertexId
     , west : Maybe VertexId
+    }
+
+
+type alias Game =
+    { start : Vertex
+    , end : Vertex
+    , path : List Vertex
     }
 
 
@@ -143,15 +151,27 @@ edges { width, height, adjacencyList } =
         |> List.map (Tuple.mapBoth (vertexById width) (vertexById width))
 
 
-randomDirection =
-    Random.uniform North [ East, South, West ]
+
+-- randomDirection : List Direction -> Random.Generator Direction
+-- randomDirection directions =
+--     Random.List.shuffle directions
+
+
+randomListElement : a -> List a -> Random.Generator a
+randomListElement default list =
+    case list of
+        [] ->
+            Random.constant default
+
+        x :: xs ->
+            Random.uniform x xs
 
 
 randomStartPoint : AdjacencyList -> Random.Generator VertexId
 randomStartPoint adjacencyList =
     adjacencyList
         |> Dict.keys
-        |> Random.uniform -1
+        |> randomListElement -1
 
 
 randomEndPoint : AdjacencyList -> VertexId -> Random.Generator VertexId
@@ -164,7 +184,7 @@ randomEndPoint adjacencyList startVertexId =
     in
     borders
         |> List.filter ((/=) startVertexId)
-        |> Random.uniform -1
+        |> randomListElement -1
 
 
 isBorder : AdjacencyRecord -> Bool
@@ -172,13 +192,55 @@ isBorder { north, east, south, west } =
     north == Nothing || east == Nothing || south == Nothing || west == Nothing
 
 
-carve : Grid -> Random.Generator ( Vertex, Vertex )
-carve { adjacencyList, width } =
+juxt : (a -> Random.Generator b) -> a -> Random.Generator ( a, b )
+juxt f x =
+    Random.map (\y -> ( x, y )) (f x)
+
+
+availableDirections : AdjacencyRecord -> List VertexId
+availableDirections record =
+    [ .north, .east, .south, .west ]
+        |> List.filterMap (\method -> method record)
+
+
+last : List a -> Maybe a
+last list =
+    case list of
+        [] ->
+            Nothing
+
+        x :: [] ->
+            Just x
+
+        x :: xs ->
+            last xs
+
+
+makeGame : Grid -> Random.Generator (Maybe Game)
+makeGame { adjacencyList, width } =
     let
         visitedVertices : VisitedVertices
         visitedVertices =
             Dict.empty
+
+        find : (a -> Maybe b) -> List a -> Maybe b
+        find f list =
+            List.filterMap f list |> List.head
+
+        carvePath : List VertexId -> ( VertexId, VertexId ) -> Maybe Game
+        carvePath path ( current, end ) =
+            if current == end && List.length path >= width * 2 then
+                Just { start = vertexById width (last path |> Maybe.withDefault 0), end = vertexById width current, path = List.map (vertexById width) path }
+
+            else if current == end then
+                Nothing
+
+            else
+                Dict.get current adjacencyList
+                    |> Maybe.map availableDirections
+                    |> Maybe.map (List.filter (\direction -> not (List.member direction path)))
+                    |> Maybe.andThen (find (\vertexId -> carvePath (vertexId :: path) ( vertexId, end )))
     in
     randomStartPoint adjacencyList
-        |> Random.andThen (\startVertexId -> Random.map (Tuple.pair startVertexId) (randomEndPoint adjacencyList startVertexId))
-        |> Random.map (Tuple.mapBoth (vertexById width) (vertexById width))
+        |> Random.andThen (juxt (randomEndPoint adjacencyList))
+        |> Random.map (carvePath [])
