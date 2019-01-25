@@ -41,7 +41,7 @@ init _ =
 
 type Msg
     = UpdateMaze Maze.Grid
-    | SetGame (Maybe Maze.Game)
+    | SetGame ( Maze.Grid, Maze.Game )
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -50,8 +50,8 @@ update msg model =
         UpdateMaze maze ->
             ( { model | maze = maze }, Cmd.none )
 
-        SetGame game ->
-            ( { model | game = game }, Cmd.none )
+        SetGame ( grid, game ) ->
+            ( { model | maze = grid, game = Just game }, Cmd.none )
 
 
 

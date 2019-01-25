@@ -4,6 +4,8 @@ import Debug
 import Dict exposing (Dict)
 import Random
 import Random.List
+import Set
+import State exposing (State)
 
 
 type alias Grid =
@@ -234,8 +236,8 @@ last list =
             last xs
 
 
-makeGame : Grid -> Random.Generator (Maybe Game)
-makeGame { adjacencyList, width } =
+makeGame : Grid -> Random.Generator ( Grid, Game )
+makeGame ({ adjacencyList, width } as grid) =
     let
         visitedVertices : VisitedVertices
         visitedVertices =
@@ -245,10 +247,10 @@ makeGame { adjacencyList, width } =
         find f list =
             List.filterMap f list |> List.head
 
-        carvePath : List VertexId -> ( VertexId, VertexId ) -> Maybe Game
+        carvePath : List VertexId -> ( VertexId, VertexId ) -> Maybe (List VertexId)
         carvePath path ( current, end ) =
             if current == end && List.length path >= width * 2 then
-                Just { start = vertexById width (last path |> Maybe.withDefault 0), end = vertexById width current, path = List.map (vertexById width) path }
+                Just (current :: path)
 
             else if current == end then
                 Nothing
@@ -257,8 +259,32 @@ makeGame { adjacencyList, width } =
                 Dict.get current adjacencyList
                     |> Maybe.map availableDirections
                     |> Maybe.map (List.filter (\direction -> not (List.member direction path)))
-                    |> Maybe.andThen (find (\vertexId -> carvePath (vertexId :: path) ( vertexId, end )))
+                    |> Maybe.andThen (find (\vertexId -> carvePath (current :: path) ( vertexId, end )))
+
+        carveGap : VertexId -> State AdjacencyList ()
+        carveGap vertexId =
+            State.get
+                |> State.map (always ())
+
+        carveGaps : List VertexId -> AdjacencyList
+        carveGaps path =
+            let
+                pathSet =
+                    Set.fromList path
+            in
+            State.traverse carveGap path
+                |> State.finalState adjacencyList
     in
     randomStartPoint adjacencyList
         |> Random.andThen (juxt (randomEndPoint adjacencyList))
-        |> Random.map (carvePath [])
+        |> Random.andThen (juxt (Random.constant << carvePath []))
+        |> Random.andThen (juxt (Random.constant << carveGaps << Maybe.withDefault [] << Tuple.second))
+        |> Random.map
+            (\( ( ( start, end ), path ), newAdjacencyList ) ->
+                ( { grid | adjacencyList = newAdjacencyList }
+                , { start = vertexById width start
+                  , end = vertexById width end
+                  , path = List.map (vertexById width) (Maybe.withDefault [] path)
+                  }
+                )
+            )
