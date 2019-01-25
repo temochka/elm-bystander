@@ -1,4 +1,4 @@
-module Maze exposing (Game, Grid, Vertex, edges, makeGame, new, vertices)
+module Maze exposing (Game, Grid, Vertex, edges, makeGame, new, toVertexId, unavailableDirection, vertices)
 
 import Debug
 import Dict exposing (Dict)
@@ -201,6 +201,24 @@ availableDirections : AdjacencyRecord -> List VertexId
 availableDirections record =
     [ .north, .east, .south, .west ]
         |> List.filterMap (\method -> method record)
+
+
+unavailableDirection : AdjacencyRecord -> Maybe ( Int, Int )
+unavailableDirection record =
+    if record.north == Nothing then
+        Just ( 0, -1 )
+
+    else if record.east == Nothing then
+        Just ( 1, 0 )
+
+    else if record.south == Nothing then
+        Just ( 0, 1 )
+
+    else if record.west == Nothing then
+        Just ( -1, 0 )
+
+    else
+        Just ( 0, 0 )
 
 
 last : List a -> Maybe a

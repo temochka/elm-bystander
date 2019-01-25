@@ -2,7 +2,9 @@ module Main exposing (Model, Msg(..), init, main, update, view)
 
 import Browser
 import Debug
+import Dict
 import Html exposing (Html, button, div, span, text)
+import Html.Attributes exposing (style)
 import Html.Events exposing (onClick)
 import Maze
 import Random
@@ -49,7 +51,7 @@ update msg model =
             ( { model | maze = maze }, Cmd.none )
 
         SetGame game ->
-            ( Debug.log "SetGame: " { model | game = game }, Cmd.none )
+            ( { model | game = game }, Cmd.none )
 
 
 
@@ -65,6 +67,14 @@ subscriptions model =
 -- VIEW
 
 
+gridColor =
+    "#453612"
+
+
+pathColor =
+    "#FCE66D"
+
+
 view : Model -> Html Msg
 view { maze, game } =
     let
@@ -74,37 +84,51 @@ view { maze, game } =
         endPoint =
             Maybe.map .end game
 
-        nodes =
-            List.map
-                (\(( row, col ) as point) ->
-                    Svg.circle
-                        [ Svg.Attributes.cx (String.fromInt (40 + 40 * col))
-                        , Svg.Attributes.cy (String.fromInt (40 + 40 * row))
-                        , Svg.Attributes.r "10"
-                        , Svg.Attributes.fill
-                            (if Maybe.map ((==) point) startPoint |> Maybe.withDefault False then
-                                "green"
+        cellWidth =
+            85 / toFloat maze.width
 
-                             else if Maybe.map ((==) point) endPoint |> Maybe.withDefault False then
-                                "red"
+        strokeWidth =
+            cellWidth / 5
 
-                             else
-                                "black"
-                            )
+        tailVector =
+            endPoint
+                |> Maybe.map (Maze.toVertexId maze.width)
+                |> Maybe.andThen (\vertexId -> Dict.get vertexId maze.adjacencyList)
+                |> Maybe.andThen Maze.unavailableDirection
+                |> Maybe.withDefault ( 0, 0 )
+
+        startNode =
+            startPoint
+                |> Maybe.map
+                    (\( row, col ) ->
+                        [ Svg.circle
+                            [ Svg.Attributes.cx (String.fromFloat (cellWidth + cellWidth * toFloat col))
+                            , Svg.Attributes.cy (String.fromFloat (cellWidth + cellWidth * toFloat row))
+                            , Svg.Attributes.r (String.fromFloat (cellWidth / 4))
+                            , Svg.Attributes.fill gridColor
+                            ]
+                            []
                         ]
-                        []
-                )
-                (Maze.vertices maze)
+                    )
+                |> Maybe.withDefault []
+
+        tail =
+            endPoint
+                |> Maybe.map (appendix cellWidth strokeWidth tailVector)
+                |> Maybe.map List.singleton
+                |> Maybe.withDefault []
 
         edges =
             List.map
                 (\( ( rowA, colA ), ( rowB, colB ) ) ->
                     Svg.line
-                        [ Svg.Attributes.x1 (String.fromInt (40 + (40 * colA)))
-                        , Svg.Attributes.y1 (String.fromInt (40 + (40 * rowA)))
-                        , Svg.Attributes.x2 (String.fromInt (40 + (40 * colB)))
-                        , Svg.Attributes.y2 (String.fromInt (40 + (40 * rowB)))
-                        , Svg.Attributes.stroke "black"
+                        [ Svg.Attributes.x1 (String.fromFloat (cellWidth + (cellWidth * toFloat colA)))
+                        , Svg.Attributes.y1 (String.fromFloat (cellWidth + (cellWidth * toFloat rowA)))
+                        , Svg.Attributes.x2 (String.fromFloat (cellWidth + (cellWidth * toFloat colB)))
+                        , Svg.Attributes.y2 (String.fromFloat (cellWidth + (cellWidth * toFloat rowB)))
+                        , Svg.Attributes.stroke gridColor
+                        , Svg.Attributes.strokeWidth (String.fromFloat strokeWidth)
+                        , Svg.Attributes.strokeLinecap "round"
                         ]
                         []
                 )
@@ -114,18 +138,83 @@ view { maze, game } =
             List.map
                 (\( ( rowA, colA ), ( rowB, colB ) ) ->
                     Svg.line
-                        [ Svg.Attributes.x1 (String.fromInt (40 + (40 * colA)))
-                        , Svg.Attributes.y1 (String.fromInt (40 + (40 * rowA)))
-                        , Svg.Attributes.x2 (String.fromInt (40 + (40 * colB)))
-                        , Svg.Attributes.y2 (String.fromInt (40 + (40 * rowB)))
-                        , Svg.Attributes.stroke "yellow"
+                        [ Svg.Attributes.x1 (String.fromFloat (cellWidth + (cellWidth * toFloat colA)))
+                        , Svg.Attributes.y1 (String.fromFloat (cellWidth + (cellWidth * toFloat rowA)))
+                        , Svg.Attributes.x2 (String.fromFloat (cellWidth + (cellWidth * toFloat colB)))
+                        , Svg.Attributes.y2 (String.fromFloat (cellWidth + (cellWidth * toFloat rowB)))
+                        , Svg.Attributes.stroke pathColor
+                        , Svg.Attributes.strokeWidth (String.fromFloat strokeWidth)
+                        , Svg.Attributes.strokeLinecap "round"
                         ]
                         []
                 )
                 (Maybe.map .path game |> Maybe.withDefault [] |> (\list -> List.map2 Tuple.pair list (Maybe.withDefault [] (List.tail list))))
+
+        pathHead =
+            game
+                |> Maybe.map .path
+                |> Maybe.andThen (List.head << List.reverse)
+                |> Maybe.map
+                    (\( row, col ) ->
+                        [ Svg.circle
+                            [ Svg.Attributes.cx (String.fromFloat (cellWidth + cellWidth * toFloat col))
+                            , Svg.Attributes.cy (String.fromFloat (cellWidth + cellWidth * toFloat row))
+                            , Svg.Attributes.r (String.fromFloat (cellWidth / 4))
+                            , Svg.Attributes.fill pathColor
+                            ]
+                            []
+                        ]
+                    )
+                |> Maybe.withDefault []
+
+        pathTail =
+            game
+                |> Maybe.map .path
+                |> Maybe.andThen List.head
+                |> Maybe.map (appendix cellWidth strokeWidth tailVector)
+                |> Maybe.map List.singleton
+                |> Maybe.withDefault []
     in
-    Svg.svg
-        [ Svg.Attributes.width "800"
-        , Svg.Attributes.height "800"
+    Html.div
+        [ style "position" "absolute"
+        , style "top" "0"
+        , style "left" "0"
+        , style "width" "100%"
+        , style "height" "100%"
+        , style "background" "#363E3F"
         ]
-        (nodes ++ edges ++ path)
+        [ Html.div
+            [ style "margin" "10vmin auto"
+            , style "width" "80vmin"
+            ]
+            [ Svg.svg
+                [ Svg.Attributes.viewBox "0 0 100 100"
+                ]
+                (Svg.rect
+                    [ Svg.Attributes.x "0"
+                    , Svg.Attributes.y "0"
+                    , Svg.Attributes.rx "1"
+                    , Svg.Attributes.ry "1"
+                    , Svg.Attributes.width "100"
+                    , Svg.Attributes.height "100"
+                    , Svg.Attributes.fill "#F1B840"
+                    ]
+                    []
+                    :: (startNode ++ edges ++ pathHead ++ path ++ pathTail)
+                )
+            ]
+        ]
+
+
+appendix : Float -> Float -> ( Int, Int ) -> Maze.Vertex -> Html Msg
+appendix cellWidth strokeWidth ( tailVectorX, tailVectorY ) ( row, col ) =
+    Svg.line
+        [ Svg.Attributes.x1 (String.fromFloat (cellWidth + (cellWidth * toFloat col)))
+        , Svg.Attributes.y1 (String.fromFloat (cellWidth + (cellWidth * toFloat row)))
+        , Svg.Attributes.x2 (String.fromFloat (cellWidth + (cellWidth * toFloat col + toFloat (5 * tailVectorX))))
+        , Svg.Attributes.y2 (String.fromFloat (cellWidth + (cellWidth * toFloat row + toFloat (5 * tailVectorY))))
+        , Svg.Attributes.stroke pathColor
+        , Svg.Attributes.strokeWidth (String.fromFloat strokeWidth)
+        , Svg.Attributes.strokeLinecap "round"
+        ]
+        []
