@@ -1,4 +1,4 @@
-module Maze exposing (Game, Grid, Vertex, edges, makeGame, new, toVertexId, unavailableDirection, vertices)
+module Maze exposing (Edge(..), Game, Grid, Vertex, edges, makeGame, new, toVertexId, unavailableDirection, vertices)
 
 import Debug
 import Dict exposing (Dict)
@@ -19,6 +19,10 @@ type alias Vertex =
     ( Int, Int )
 
 
+type Edge
+    = Edge Vertex Vertex Bool
+
+
 type alias VertexId =
     Int
 
@@ -30,11 +34,16 @@ type Direction
     | West
 
 
+type Connection
+    = Intact VertexId
+    | Broken VertexId
+
+
 type alias AdjacencyRecord =
-    { north : Maybe VertexId
-    , east : Maybe VertexId
-    , south : Maybe VertexId
-    , west : Maybe VertexId
+    { north : Maybe Connection
+    , east : Maybe Connection
+    , south : Maybe Connection
+    , west : Maybe Connection
     }
 
 
@@ -78,25 +87,25 @@ new width height =
             in
             { north =
                 if i > 0 then
-                    Just north
+                    Just (Intact north)
 
                 else
                     Nothing
             , east =
                 if j < width - 1 then
-                    Just east
+                    Just (Intact east)
 
                 else
                     Nothing
             , south =
                 if i < height - 1 then
-                    Just south
+                    Just (Intact south)
 
                 else
                     Nothing
             , west =
                 if j > 0 then
-                    Just west
+                    Just (Intact west)
 
                 else
                     Nothing
@@ -111,6 +120,26 @@ new width height =
     }
 
 
+passConnection : Connection -> Maybe VertexId
+passConnection connection =
+    case connection of
+        Intact vertexId ->
+            Just vertexId
+
+        Broken _ ->
+            Nothing
+
+
+resolveConnection : Connection -> VertexId
+resolveConnection connection =
+    case connection of
+        Intact vertexId ->
+            vertexId
+
+        Broken vertexId ->
+            vertexId
+
+
 toVertexId : Int -> Vertex -> VertexId
 toVertexId width ( i, j ) =
     i * width + j
@@ -121,12 +150,22 @@ vertexById width vertexId =
     ( vertexId // width, modBy width vertexId )
 
 
+isIntact : Connection -> Bool
+isIntact connection =
+    case connection of
+        Intact _ ->
+            True
+
+        _ ->
+            False
+
+
 vertices : Grid -> List Vertex
 vertices { adjacencyList, width } =
     adjacencyList |> Dict.keys |> List.map (vertexById width)
 
 
-edges : Grid -> List ( Vertex, Vertex )
+edges : Grid -> List Edge
 edges { width, height, adjacencyList } =
     let
         vertexEdges vertexId =
@@ -136,21 +175,24 @@ edges { width, height, adjacencyList } =
             , Dict.get vertexId adjacencyList |> Maybe.andThen .west
             ]
                 |> List.filterMap identity
-                |> List.map (Tuple.pair vertexId)
+                |> List.map (\connection -> ( ( vertexId, resolveConnection connection ), isIntact connection ))
 
-        reducer ( vertexA, vertexB ) dict =
+        reducer ( ( vertexA, vertexB ), intact ) dict =
             if Dict.member ( vertexB, vertexA ) dict then
                 dict
 
             else
-                Dict.insert ( vertexA, vertexB ) True dict
+                Dict.insert ( vertexA, vertexB ) intact dict
+
+        makeEdge ( ( vertexA, vertexB ), intact ) =
+            Edge (vertexById width vertexA) (vertexById width vertexB) intact
     in
     adjacencyList
         |> Dict.keys
         |> List.concatMap vertexEdges
         |> List.foldl reducer Dict.empty
-        |> Dict.keys
-        |> List.map (Tuple.mapBoth (vertexById width) (vertexById width))
+        |> Dict.toList
+        |> List.map makeEdge
 
 
 
@@ -202,7 +244,7 @@ juxt f x =
 availableDirections : AdjacencyRecord -> List VertexId
 availableDirections record =
     [ .north, .east, .south, .west ]
-        |> List.filterMap (\method -> method record)
+        |> List.filterMap (\method -> method record |> Maybe.andThen passConnection)
 
 
 unavailableDirection : AdjacencyRecord -> Maybe ( Int, Int )
@@ -240,17 +282,17 @@ removeEdge : VertexId -> VertexId -> AdjacencyList -> AdjacencyList
 removeEdge vertexIdA vertexIdB adjacencyList =
     let
         removeHelper vertexId record =
-            if record.north == Just vertexId then
-                { record | north = Nothing }
+            if record.north == Just (Intact vertexId) then
+                { record | north = Just (Broken vertexId) }
 
-            else if record.east == Just vertexId then
-                { record | east = Nothing }
+            else if record.east == Just (Intact vertexId) then
+                { record | east = Just (Broken vertexId) }
 
-            else if record.south == Just vertexId then
-                { record | south = Nothing }
+            else if record.south == Just (Intact vertexId) then
+                { record | south = Just (Broken vertexId) }
 
-            else if record.west == Just vertexId then
-                { record | west = Nothing }
+            else if record.west == Just (Intact vertexId) then
+                { record | west = Just (Broken vertexId) }
 
             else
                 record
@@ -285,9 +327,17 @@ makeGame ({ adjacencyList, width } as grid) =
                     |> Maybe.map (List.filter (\direction -> not (List.member direction path)))
                     |> Maybe.andThen (find (\vertexId -> carvePath (current :: path) ( vertexId, end )))
 
-        carveGap : Set VertexId -> List VertexId -> VertexId -> State AdjacencyList ()
+        carveGap : Dict VertexId VertexId -> List VertexId -> VertexId -> State AdjacencyList ()
         carveGap thePath path vertexId =
-            if Set.member vertexId thePath && not (List.member vertexId path) && not (List.isEmpty path) then
+            let
+                lastVertexId =
+                    List.head path |> Maybe.withDefault -1
+            in
+            if
+                Dict.member vertexId thePath
+                    && not (Dict.get vertexId thePath |> Maybe.map ((==) lastVertexId) |> Maybe.withDefault False)
+                    && not (Dict.get lastVertexId thePath |> Maybe.map ((==) vertexId) |> Maybe.withDefault False)
+            then
                 State.modify (removeEdge (path |> List.head |> Maybe.withDefault -1) vertexId)
 
             else
@@ -309,7 +359,8 @@ makeGame ({ adjacencyList, width } as grid) =
         carveGaps path =
             let
                 pathSet =
-                    Set.fromList path
+                    List.map2 Tuple.pair path (Maybe.withDefault [] (List.tail path))
+                        |> Dict.fromList
             in
             State.traverse (carveGap pathSet []) path
                 |> State.finalState adjacencyList

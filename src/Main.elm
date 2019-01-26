@@ -67,6 +67,10 @@ subscriptions model =
 -- VIEW
 
 
+boardColor =
+    "#F1B840"
+
+
 gridColor =
     "#453612"
 
@@ -119,18 +123,53 @@ view { maze, game } =
                 |> Maybe.withDefault []
 
         edges =
-            List.map
-                (\( ( rowA, colA ), ( rowB, colB ) ) ->
-                    Svg.line
-                        [ Svg.Attributes.x1 (String.fromFloat (cellWidth + (cellWidth * toFloat colA)))
-                        , Svg.Attributes.y1 (String.fromFloat (cellWidth + (cellWidth * toFloat rowA)))
-                        , Svg.Attributes.x2 (String.fromFloat (cellWidth + (cellWidth * toFloat colB)))
-                        , Svg.Attributes.y2 (String.fromFloat (cellWidth + (cellWidth * toFloat rowB)))
+            List.concatMap
+                (\(Maze.Edge ( rowA, colA ) ( rowB, colB ) intact) ->
+                    let
+                        x1 =
+                            cellWidth * toFloat colA
+
+                        y1 =
+                            cellWidth * toFloat rowA
+
+                        x2 =
+                            cellWidth * toFloat colB
+
+                        y2 =
+                            cellWidth * toFloat rowB
+
+                        dx =
+                            x2 - x1
+
+                        dy =
+                            y2 - y1
+                    in
+                    [ Svg.line
+                        [ Svg.Attributes.x1 (String.fromFloat (cellWidth + x1))
+                        , Svg.Attributes.y1 (String.fromFloat (cellWidth + y1))
+                        , Svg.Attributes.x2 (String.fromFloat (cellWidth + x2))
+                        , Svg.Attributes.y2 (String.fromFloat (cellWidth + y2))
                         , Svg.Attributes.stroke gridColor
                         , Svg.Attributes.strokeWidth (String.fromFloat strokeWidth)
                         , Svg.Attributes.strokeLinecap "round"
                         ]
                         []
+                    ]
+                        ++ (if not intact then
+                                [ Svg.line
+                                    [ Svg.Attributes.x1 (String.fromFloat (cellWidth + x1 + dx * (2 / 5)))
+                                    , Svg.Attributes.y1 (String.fromFloat (cellWidth + y1 + dy * (2 / 5)))
+                                    , Svg.Attributes.x2 (String.fromFloat (cellWidth + x2 - dx * (2 / 5)))
+                                    , Svg.Attributes.y2 (String.fromFloat (cellWidth + y2 - dy * (2 / 5)))
+                                    , Svg.Attributes.stroke boardColor
+                                    , Svg.Attributes.strokeWidth (String.fromFloat (1.1 * strokeWidth))
+                                    ]
+                                    []
+                                ]
+
+                            else
+                                []
+                           )
                 )
                 (Maze.edges maze)
 
@@ -197,10 +236,15 @@ view { maze, game } =
                     , Svg.Attributes.ry "1"
                     , Svg.Attributes.width "100"
                     , Svg.Attributes.height "100"
-                    , Svg.Attributes.fill "#F1B840"
+                    , Svg.Attributes.fill boardColor
                     ]
                     []
-                    :: (startNode ++ edges ++ pathHead ++ path ++ pathTail)
+                    :: (startNode
+                            ++ edges
+                            ++ pathHead
+                            ++ path
+                            ++ pathTail
+                       )
                 )
             ]
         ]
