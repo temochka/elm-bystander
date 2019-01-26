@@ -4,7 +4,7 @@ import Debug
 import Dict exposing (Dict)
 import Random
 import Random.List
-import Set
+import Set exposing (Set)
 import State exposing (State)
 
 
@@ -236,6 +236,30 @@ last list =
             last xs
 
 
+removeEdge : VertexId -> VertexId -> AdjacencyList -> AdjacencyList
+removeEdge vertexIdA vertexIdB adjacencyList =
+    let
+        removeHelper vertexId record =
+            if record.north == Just vertexId then
+                { record | north = Nothing }
+
+            else if record.east == Just vertexId then
+                { record | east = Nothing }
+
+            else if record.south == Just vertexId then
+                { record | south = Nothing }
+
+            else if record.west == Just vertexId then
+                { record | west = Nothing }
+
+            else
+                record
+    in
+    adjacencyList
+        |> Dict.update vertexIdA (Maybe.map (removeHelper vertexIdB))
+        |> Dict.update vertexIdB (Maybe.map (removeHelper vertexIdA))
+
+
 makeGame : Grid -> Random.Generator ( Grid, Game )
 makeGame ({ adjacencyList, width } as grid) =
     let
@@ -261,18 +285,33 @@ makeGame ({ adjacencyList, width } as grid) =
                     |> Maybe.map (List.filter (\direction -> not (List.member direction path)))
                     |> Maybe.andThen (find (\vertexId -> carvePath (current :: path) ( vertexId, end )))
 
-        carveGap : VertexId -> State AdjacencyList ()
-        carveGap vertexId =
-            State.get
-                |> State.map (always ())
+        carveGap : Set VertexId -> List VertexId -> VertexId -> State AdjacencyList ()
+        carveGap thePath path vertexId =
+            if Set.member vertexId thePath && not (List.member vertexId path) && not (List.isEmpty path) then
+                State.modify (removeEdge (path |> List.head |> Maybe.withDefault -1) vertexId)
 
+            else
+                State.get
+                    |> State.andThen
+                        (\state ->
+                            state
+                                |> Dict.get vertexId
+                                |> Maybe.map availableDirections
+                                |> Maybe.map (List.filter (\neighbor -> not (List.member neighbor path)))
+                                |> Maybe.withDefault []
+                                |> State.traverse (\neighbor -> carveGap thePath (vertexId :: path) neighbor)
+                                |> State.map (always ())
+                        )
+
+        -- State.get
+        --     |> State.map (always ())
         carveGaps : List VertexId -> AdjacencyList
         carveGaps path =
             let
                 pathSet =
                     Set.fromList path
             in
-            State.traverse carveGap path
+            State.traverse (carveGap pathSet []) path
                 |> State.finalState adjacencyList
     in
     randomStartPoint adjacencyList
