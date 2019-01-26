@@ -309,23 +309,39 @@ makeGame ({ adjacencyList, width } as grid) =
         visitedVertices =
             Dict.empty
 
-        find : (a -> Maybe b) -> List a -> Maybe b
-        find f list =
-            List.filterMap f list |> List.head
+        randomFind : (a -> Random.Generator (Maybe b)) -> List a -> Random.Generator (Maybe b)
+        randomFind f list =
+            case list of
+                x :: xs ->
+                    Random.andThen
+                        (\result ->
+                            case result of
+                                Nothing ->
+                                    randomFind f xs
 
-        carvePath : List VertexId -> ( VertexId, VertexId ) -> Maybe (List VertexId)
+                                value ->
+                                    Random.constant value
+                        )
+                        (f x)
+
+                [] ->
+                    Random.constant Nothing
+
+        carvePath : List VertexId -> ( VertexId, VertexId ) -> Random.Generator (Maybe (List VertexId))
         carvePath path ( current, end ) =
             if current == end && List.length path >= width * 2 then
-                Just (current :: path)
+                Random.constant (Just (current :: path))
 
             else if current == end then
-                Nothing
+                Random.constant Nothing
 
             else
                 Dict.get current adjacencyList
                     |> Maybe.map availableDirections
-                    |> Maybe.map (List.filter (\direction -> not (List.member direction path)))
-                    |> Maybe.andThen (find (\vertexId -> carvePath (current :: path) ( vertexId, end )))
+                    |> Maybe.withDefault []
+                    |> Random.List.shuffle
+                    |> Random.map (List.filter (\direction -> not (List.member direction path)))
+                    |> Random.andThen (randomFind (\vertexId -> carvePath (current :: path) ( vertexId, end )))
 
         carveGap : Dict VertexId VertexId -> List VertexId -> VertexId -> State AdjacencyList ()
         carveGap thePath path vertexId =
@@ -367,7 +383,7 @@ makeGame ({ adjacencyList, width } as grid) =
     in
     randomStartPoint adjacencyList
         |> Random.andThen (juxt (randomEndPoint adjacencyList))
-        |> Random.andThen (juxt (Random.constant << carvePath []))
+        |> Random.andThen (juxt (carvePath []))
         |> Random.andThen (juxt (Random.constant << carveGaps << Maybe.withDefault [] << Tuple.second))
         |> Random.map
             (\( ( ( start, end ), path ), newAdjacencyList ) ->
