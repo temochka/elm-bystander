@@ -1,4 +1,4 @@
-module Maze exposing (Edge(..), Game, Grid, Vertex, edges, makeGame, new, toVertexId, unavailableDirection, vertices)
+module Maze exposing (AdjacencyRecord, Direction(..), Edge(..), Game, Grid, Vertex, VertexId, edges, go, makeGame, new, passConnection, toVertexId, vertices)
 
 import Debug
 import Dict exposing (Dict)
@@ -50,7 +50,9 @@ type alias AdjacencyRecord =
 type alias Game =
     { start : Vertex
     , end : Vertex
+    , correctPath : List Vertex
     , path : List Vertex
+    , finishingMove : Direction
     }
 
 
@@ -201,6 +203,13 @@ edges { width, height, adjacencyList } =
 --     Random.List.shuffle directions
 
 
+go : Grid -> Vertex -> (AdjacencyRecord -> Maybe VertexId) -> Maybe Vertex
+go { adjacencyList, width } fromVertex direction =
+    Dict.get (toVertexId width fromVertex) adjacencyList
+        |> Maybe.andThen direction
+        |> Maybe.map (vertexById width)
+
+
 randomListElement : a -> List a -> Random.Generator a
 randomListElement default list =
     case list of
@@ -241,28 +250,28 @@ juxt f x =
     Random.map (\y -> ( x, y )) (f x)
 
 
+missingDirection : AdjacencyRecord -> Maybe Direction
+missingDirection record =
+    if record.north == Nothing then
+        Just North
+
+    else if record.east == Nothing then
+        Just East
+
+    else if record.south == Nothing then
+        Just South
+
+    else if record.west == Nothing then
+        Just West
+
+    else
+        Nothing
+
+
 availableDirections : AdjacencyRecord -> List VertexId
 availableDirections record =
     [ .north, .east, .south, .west ]
         |> List.filterMap (\method -> method record |> Maybe.andThen passConnection)
-
-
-unavailableDirection : AdjacencyRecord -> Maybe ( Int, Int )
-unavailableDirection record =
-    if record.north == Nothing then
-        Just ( 0, -1 )
-
-    else if record.east == Nothing then
-        Just ( 1, 0 )
-
-    else if record.south == Nothing then
-        Just ( 0, 1 )
-
-    else if record.west == Nothing then
-        Just ( -1, 0 )
-
-    else
-        Just ( 0, 0 )
 
 
 last : List a -> Maybe a
@@ -390,7 +399,9 @@ makeGame ({ adjacencyList, width } as grid) =
                 ( { grid | adjacencyList = newAdjacencyList }
                 , { start = vertexById width start
                   , end = vertexById width end
-                  , path = List.map (vertexById width) (Maybe.withDefault [] path)
+                  , correctPath = List.map (vertexById width) (Maybe.withDefault [] path)
+                  , path = [ vertexById width start ]
+                  , finishingMove = adjacencyList |> Dict.get end |> Maybe.andThen missingDirection |> Maybe.withDefault North
                   }
                 )
             )
