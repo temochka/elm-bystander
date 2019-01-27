@@ -14,14 +14,6 @@ import Svg
 import Svg.Attributes
 
 
-type Direction
-    = Left
-    | Right
-    | Up
-    | Down
-    | None
-
-
 keyDecoder : Decode.Decoder Msg
 keyDecoder =
     Decode.map (KeyPress << toDirection) (Decode.field "key" Decode.string)
@@ -43,23 +35,23 @@ finishingDirection direction =
             ( -1, 0 )
 
 
-toDirection : String -> Direction
+toDirection : String -> Maybe Maze.Direction
 toDirection string =
     case string of
         "ArrowLeft" ->
-            Left
+            Just Maze.West
 
         "ArrowRight" ->
-            Right
+            Just Maze.East
 
         "ArrowDown" ->
-            Down
+            Just Maze.South
 
         "ArrowUp" ->
-            Up
+            Just Maze.North
 
         _ ->
-            None
+            Nothing
 
 
 main =
@@ -76,9 +68,14 @@ type GameState
     | Completed Maze.Game
 
 
+type Animation
+    = BlinkPath String
+
+
 type alias Model =
     { maze : Maze.Grid
     , gameState : GameState
+    , animations : List Animation
     }
 
 
@@ -86,9 +83,9 @@ init : () -> ( Model, Cmd Msg )
 init _ =
     let
         maze =
-            Maze.new 5 5
+            Maze.new 6 6
     in
-    ( { maze = maze, gameState = Loading }, Random.generate SetGame (Maze.makeGame maze) )
+    ( { maze = maze, gameState = Loading, animations = [] }, Random.generate SetGame (Maze.makeGame maze) )
 
 
 
@@ -98,65 +95,67 @@ init _ =
 type Msg
     = UpdateMaze Maze.Grid
     | SetGame ( Maze.Grid, Maze.Game )
-    | KeyPress Direction
+    | KeyPress (Maybe Maze.Direction)
 
 
-directionToAccessor : Direction -> (Maze.AdjacencyRecord -> Maybe Maze.VertexId)
+directionToAccessor : Maybe Maze.Direction -> (Maze.AdjacencyRecord -> Maybe Maze.VertexId)
 directionToAccessor direction =
     case direction of
-        Left ->
+        Just Maze.West ->
             \record -> record.west |> Maybe.andThen Maze.passConnection
 
-        Right ->
+        Just Maze.East ->
             \record -> record.east |> Maybe.andThen Maze.passConnection
 
-        Up ->
+        Just Maze.North ->
             \record -> record.north |> Maybe.andThen Maze.passConnection
 
-        Down ->
+        Just Maze.South ->
             \record -> record.south |> Maybe.andThen Maze.passConnection
 
-        None ->
+        Nothing ->
             always Nothing
 
 
-handleKeyPress : Direction -> Maze.Grid -> Maze.Game -> ( Model, Cmd Msg )
+handleKeyPress : Maybe Maze.Direction -> Maze.Grid -> Maze.Game -> ( Model, Cmd Msg )
 handleKeyPress direction grid game =
     case game.path of
-        currentVertex :: previousVertex :: _ ->
+        currentVertex :: previousVertexes ->
             let
                 potentialNextVertex =
                     Maze.go grid currentVertex (directionToAccessor direction)
+
+                previousVertex =
+                    List.head previousVertexes
             in
             case potentialNextVertex of
                 Just nextVertex ->
-                    if nextVertex == previousVertex then
-                        ( { maze = grid, gameState = Playing { game | path = List.tail game.path |> Maybe.withDefault [] } }, Cmd.none )
+                    if potentialNextVertex == previousVertex then
+                        ( { animations = [], maze = grid, gameState = Playing { game | path = List.tail game.path |> Maybe.withDefault [] } }, Cmd.none )
+
+                    else if List.member nextVertex game.path then
+                        ( { animations = [ BlinkPath "red" ], maze = grid, gameState = Playing game }, Cmd.none )
 
                     else
-                        ( { maze = grid, gameState = Playing { game | path = nextVertex :: game.path } }, Cmd.none )
+                        ( { animations = [], maze = grid, gameState = Playing { game | path = nextVertex :: game.path } }, Cmd.none )
 
                 Nothing ->
-                    ( { maze = grid, gameState = Playing game }, Cmd.none )
+                    if currentVertex == game.end && (direction |> Maybe.map ((==) game.finishingMove) |> Maybe.withDefault False) then
+                        ( { animations = [], maze = grid, gameState = Completed game }, Cmd.none )
 
-        currentVertex :: _ ->
-            let
-                potentialNextVertex =
-                    Maze.go grid currentVertex (directionToAccessor direction)
-            in
-            case potentialNextVertex of
-                Just nextVertex ->
-                    ( { maze = grid, gameState = Playing { game | path = nextVertex :: game.path } }, Cmd.none )
-
-                Nothing ->
-                    ( { maze = grid, gameState = Playing game }, Cmd.none )
+                    else
+                        ( { animations = [ BlinkPath "red" ], maze = grid, gameState = Playing game }, Cmd.none )
 
         _ ->
-            ( { maze = grid, gameState = Playing game }, Cmd.none )
+            ( { animations = [], maze = grid, gameState = Playing game }, Cmd.none )
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
-update msg model =
+update msg modelWithOldAnimations =
+    let
+        model =
+            { modelWithOldAnimations | animations = [] }
+    in
     case msg of
         UpdateMaze maze ->
             ( { model | maze = maze }, Cmd.none )
@@ -198,8 +197,12 @@ pathColor =
     "#FCE66D"
 
 
+completedPathColor =
+    "#FFFFFF"
+
+
 view : Model -> Html Msg
-view { maze, gameState } =
+view { maze, gameState, animations } =
     let
         cellWidth =
             85 / toFloat maze.width
@@ -273,22 +276,6 @@ view { maze, gameState } =
                 )
                 (Maze.edges maze)
 
-        renderPath path =
-            List.map
-                (\( ( rowA, colA ), ( rowB, colB ) ) ->
-                    Svg.line
-                        [ Svg.Attributes.x1 (String.fromFloat (cellWidth + (cellWidth * toFloat colA)))
-                        , Svg.Attributes.y1 (String.fromFloat (cellWidth + (cellWidth * toFloat rowA)))
-                        , Svg.Attributes.x2 (String.fromFloat (cellWidth + (cellWidth * toFloat colB)))
-                        , Svg.Attributes.y2 (String.fromFloat (cellWidth + (cellWidth * toFloat rowB)))
-                        , Svg.Attributes.stroke pathColor
-                        , Svg.Attributes.strokeWidth (String.fromFloat strokeWidth)
-                        , Svg.Attributes.strokeLinecap "round"
-                        ]
-                        []
-                )
-                (List.map2 Tuple.pair path (Maybe.withDefault [] (List.tail path)))
-
         renderPathHead path =
             List.reverse path
                 |> List.head
@@ -298,12 +285,44 @@ view { maze, gameState } =
                             [ Svg.Attributes.cx (String.fromFloat (cellWidth + cellWidth * toFloat col))
                             , Svg.Attributes.cy (String.fromFloat (cellWidth + cellWidth * toFloat row))
                             , Svg.Attributes.r (String.fromFloat (cellWidth / 4))
-                            , Svg.Attributes.fill pathColor
                             ]
                             []
                         ]
                     )
                 |> Maybe.withDefault []
+
+        renderPath path color blink =
+            [ Svg.g
+                [ Svg.Attributes.id "pathAnimation"
+                , Svg.Attributes.stroke color
+                , Svg.Attributes.fill color
+                , Svg.Attributes.class
+                    (if blink == Nothing then
+                        ""
+
+                     else
+                        "animatedPath"
+                    )
+                ]
+                (renderPathHead path
+                    ++ List.map
+                        (\( ( rowA, colA ), ( rowB, colB ) ) ->
+                            Svg.line
+                                [ Svg.Attributes.x1 (String.fromFloat (cellWidth + (cellWidth * toFloat colA)))
+                                , Svg.Attributes.y1 (String.fromFloat (cellWidth + (cellWidth * toFloat rowA)))
+                                , Svg.Attributes.x2 (String.fromFloat (cellWidth + (cellWidth * toFloat colB)))
+                                , Svg.Attributes.y2 (String.fromFloat (cellWidth + (cellWidth * toFloat rowB)))
+                                , Svg.Attributes.strokeWidth (String.fromFloat strokeWidth)
+                                , Svg.Attributes.strokeLinecap "round"
+                                ]
+                                []
+                        )
+                        (List.map2 Tuple.pair path (Maybe.withDefault [] (List.tail path)))
+                    ++ [ Svg.animate [ Svg.Attributes.attributeType "XML", Svg.Attributes.attributeName "stroke", Svg.Attributes.from (blink |> Maybe.withDefault color), Svg.Attributes.to color, Svg.Attributes.dur "1s", Svg.Attributes.repeatCount "1", Svg.Attributes.begin "pathAnimation.DOMSubtreeModified" ] []
+                       , Svg.animate [ Svg.Attributes.attributeType "XML", Svg.Attributes.attributeName "fill", Svg.Attributes.from (blink |> Maybe.withDefault color), Svg.Attributes.to color, Svg.Attributes.dur "1s", Svg.Attributes.repeatCount "1", Svg.Attributes.begin "pathAnimation.DOMSubtreeModified" ] []
+                       ]
+                )
+            ]
 
         objects =
             case gameState of
@@ -314,16 +333,14 @@ view { maze, gameState } =
                     renderStartNode game.start
                         ++ renderEdges
                         ++ renderTail game.end game.finishingMove gridColor
-                        ++ renderPathHead game.path
-                        ++ renderPath game.path
+                        ++ renderPath game.path pathColor (List.head animations |> Maybe.map (\(BlinkPath color) -> color))
 
                 Completed game ->
                     renderStartNode game.start
                         ++ renderEdges
                         ++ renderTail game.end game.finishingMove pathColor
-                        ++ renderPathHead game.path
-                        ++ renderPath game.path
-                        ++ renderTail game.end game.finishingMove pathColor
+                        ++ renderPath game.path completedPathColor Nothing
+                        ++ renderTail game.end game.finishingMove completedPathColor
     in
     Html.div
         [ style "position" "absolute"
