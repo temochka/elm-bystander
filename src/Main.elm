@@ -12,6 +12,7 @@ import Maze
 import Random
 import Svg
 import Svg.Attributes
+import Time
 
 
 keyDecoder : Decode.Decoder Msg
@@ -66,6 +67,7 @@ type GameState
     = Loading
     | Playing Maze.Game
     | Completed Maze.Game
+    | Demo Maze.Game
 
 
 type Animation
@@ -76,6 +78,7 @@ type alias Model =
     { maze : Maze.Grid
     , gameState : GameState
     , animations : List Animation
+    , selectedMode : Maze.Game -> GameState
     }
 
 
@@ -85,7 +88,7 @@ init _ =
         maze =
             Maze.new 6 6
     in
-    ( { maze = maze, gameState = Loading, animations = [] }, Random.generate SetGame (Maze.makeGame maze) )
+    ( { maze = maze, gameState = Loading, animations = [], selectedMode = Demo }, Random.generate SetGame (Maze.makeGame maze) )
 
 
 
@@ -96,6 +99,7 @@ type Msg
     = UpdateMaze Maze.Grid
     | SetGame ( Maze.Grid, Maze.Game )
     | KeyPress (Maybe Maze.Direction)
+    | AiMove Time.Posix
 
 
 directionToAccessor : Maybe Maze.Direction -> (Maze.AdjacencyRecord -> Maybe Maze.VertexId)
@@ -117,8 +121,32 @@ directionToAccessor direction =
             always Nothing
 
 
-handleKeyPress : Maybe Maze.Direction -> Maze.Grid -> Maze.Game -> ( Model, Cmd Msg )
-handleKeyPress direction grid game =
+nextAiMove : Maze.Grid -> Maze.Game -> Maybe Maze.Direction
+nextAiMove grid game =
+    let
+        currentNode =
+            List.head game.path |> Maybe.withDefault game.start
+
+        _ =
+            Debug.log "currentNode: " currentNode
+
+        nextNode =
+            game.correctPath |> List.drop (max (List.length game.path) 1) |> List.head
+
+        _ =
+            Debug.log "nextNode: " nextNode
+    in
+    case nextNode of
+        Nothing ->
+            Just game.finishingMove
+
+        Just node ->
+            Dict.get (Maze.toVertexId grid.width currentNode) grid.adjacencyList
+                |> Maybe.andThen (\record -> Maze.getDirection record (Maze.toVertexId grid.width node))
+
+
+handleKeyPress : (Maze.Game -> GameState) -> Maybe Maze.Direction -> Maze.Grid -> Maze.Game -> ( Model, Cmd Msg )
+handleKeyPress mode direction grid game =
     case game.path of
         currentVertex :: previousVertexes ->
             let
@@ -131,23 +159,23 @@ handleKeyPress direction grid game =
             case potentialNextVertex of
                 Just nextVertex ->
                     if potentialNextVertex == previousVertex then
-                        ( { animations = [], maze = grid, gameState = Playing { game | path = List.tail game.path |> Maybe.withDefault [] } }, Cmd.none )
+                        ( { animations = [], maze = grid, selectedMode = mode, gameState = mode { game | path = List.tail game.path |> Maybe.withDefault [] } }, Cmd.none )
 
                     else if List.member nextVertex game.path then
-                        ( { animations = [ BlinkPath "red" ], maze = grid, gameState = Playing game }, Cmd.none )
+                        ( { animations = [ BlinkPath "red" ], maze = grid, selectedMode = mode, gameState = mode game }, Cmd.none )
 
                     else
-                        ( { animations = [], maze = grid, gameState = Playing { game | path = nextVertex :: game.path } }, Cmd.none )
+                        ( { animations = [], maze = grid, selectedMode = mode, gameState = mode { game | path = nextVertex :: game.path } }, Cmd.none )
 
                 Nothing ->
                     if currentVertex == game.end && (direction |> Maybe.map ((==) game.finishingMove) |> Maybe.withDefault False) then
-                        ( { animations = [], maze = grid, gameState = Completed game }, Cmd.none )
+                        ( { animations = [], maze = grid, selectedMode = mode, gameState = Completed game }, Cmd.none )
 
                     else
-                        ( { animations = [ BlinkPath "red" ], maze = grid, gameState = Playing game }, Cmd.none )
+                        ( { animations = [ BlinkPath "red" ], maze = grid, selectedMode = mode, gameState = mode game }, Cmd.none )
 
         _ ->
-            ( { animations = [], maze = grid, gameState = Playing game }, Cmd.none )
+            ( { animations = [], maze = grid, selectedMode = mode, gameState = mode game }, Cmd.none )
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -161,12 +189,30 @@ update msg modelWithOldAnimations =
             ( { model | maze = maze }, Cmd.none )
 
         SetGame ( grid, game ) ->
-            ( { model | maze = grid, gameState = Playing game }, Cmd.none )
+            ( { model | maze = grid, gameState = Demo game }, Cmd.none )
 
         KeyPress direction ->
             case model.gameState of
                 Playing game ->
-                    handleKeyPress direction model.maze game
+                    handleKeyPress model.selectedMode direction model.maze game
+
+                _ ->
+                    ( model, Cmd.none )
+
+        AiMove _ ->
+            case model.gameState of
+                Demo game ->
+                    let
+                        nextMove =
+                            nextAiMove model.maze game
+
+                        _ =
+                            Debug.log "nextAiMove" nextMove
+                    in
+                    handleKeyPress model.selectedMode nextMove model.maze game
+
+                Completed _ ->
+                    init ()
 
                 _ ->
                     ( model, Cmd.none )
@@ -178,7 +224,10 @@ update msg modelWithOldAnimations =
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    Events.onKeyDown keyDecoder
+    Sub.batch
+        [ Events.onKeyDown keyDecoder
+        , Time.every 200.0 AiMove
+        ]
 
 
 
@@ -328,6 +377,12 @@ view { maze, gameState, animations } =
             case gameState of
                 Loading ->
                     []
+
+                Demo game ->
+                    renderStartNode game.start
+                        ++ renderEdges
+                        ++ renderTail game.end game.finishingMove gridColor
+                        ++ renderPath game.path pathColor (List.head animations |> Maybe.map (\(BlinkPath color) -> color))
 
                 Playing game ->
                     renderStartNode game.start

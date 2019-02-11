@@ -1,4 +1,4 @@
-module Maze exposing (AdjacencyRecord, Direction(..), Edge(..), Game, Grid, Vertex, VertexId, edges, go, makeGame, new, passConnection, toVertexId, vertices)
+module Maze exposing (AdjacencyRecord, Direction(..), Edge(..), Game, Grid, Vertex, VertexId, edges, getDirection, go, makeGame, new, passConnection, toVertexId, vertices)
 
 import Debug
 import Dict exposing (Dict)
@@ -274,17 +274,22 @@ availableDirections record =
         |> List.filterMap (\method -> method record |> Maybe.andThen passConnection)
 
 
-last : List a -> Maybe a
-last list =
-    case list of
-        [] ->
-            Nothing
+getDirection : AdjacencyRecord -> VertexId -> Maybe Direction
+getDirection record targetVertexId =
+    if record.north == Just (Intact targetVertexId) then
+        Just North
 
-        x :: [] ->
-            Just x
+    else if record.east == Just (Intact targetVertexId) then
+        Just East
 
-        x :: xs ->
-            last xs
+    else if record.south == Just (Intact targetVertexId) then
+        Just South
+
+    else if record.west == Just (Intact targetVertexId) then
+        Just West
+
+    else
+        Nothing
 
 
 removeEdge : VertexId -> VertexId -> AdjacencyList -> AdjacencyList
@@ -399,7 +404,7 @@ makeGame ({ adjacencyList, width } as grid) =
                 ( { grid | adjacencyList = newAdjacencyList }
                 , { start = vertexById width start
                   , end = vertexById width end
-                  , correctPath = List.map (vertexById width) (Maybe.withDefault [] path)
+                  , correctPath = List.reverse (List.map (vertexById width) (Maybe.withDefault [] path))
                   , path = [ vertexById width start ]
                   , finishingMove = adjacencyList |> Dict.get end |> Maybe.andThen missingDirection |> Maybe.withDefault North
                   }

@@ -12,11 +12,11 @@
             "elm/json": "1.1.2",
             "elm/random": "1.0.0",
             "elm/svg": "1.0.1",
+            "elm/time": "1.0.0",
             "elm-community/random-extra": "3.0.0",
             "folkertdev/elm-state": "3.0.1"
         },
         "indirect": {
-            "elm/time": "1.0.0",
             "elm/url": "1.0.0",
             "elm/virtual-dom": "1.0.2"
         }
