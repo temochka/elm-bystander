@@ -1,4 +1,4 @@
-module Maze exposing (AdjacencyRecord, Direction(..), Edge(..), Game, Grid, Vertex, VertexId, edges, getDirection, go, makeGame, new, passConnection, toVertexId, vertices)
+module Maze exposing (AdjacencyRecord, Direction(..), Edge(..), Game, Grid, VertexId, VertexOnGrid, edges, getDirection, go, makeGame, new, passConnection, vertexIdOnGrid, vertices)
 
 import Debug
 import Dict exposing (Dict)
@@ -15,12 +15,12 @@ type alias Grid =
     }
 
 
-type alias Vertex =
+type alias VertexOnGrid =
     ( Int, Int )
 
 
 type Edge
-    = Edge Vertex Vertex Bool
+    = Edge VertexId VertexId Bool
 
 
 type alias VertexId =
@@ -48,10 +48,10 @@ type alias AdjacencyRecord =
 
 
 type alias Game =
-    { start : Vertex
-    , end : Vertex
-    , correctPath : List Vertex
-    , path : List Vertex
+    { start : VertexId
+    , end : VertexId
+    , correctPath : List VertexId
+    , path : List VertexId
     , finishingMove : Direction
     }
 
@@ -115,7 +115,7 @@ new width height =
     in
     { adjacencyList =
         rows
-            |> List.concatMap (\i -> List.map (\j -> ( i * width + j, adjacencyRecord i j )) cols)
+            |> List.concatMap (\i -> List.map (\j -> ( toVertexId width ( i, j ), adjacencyRecord i j )) cols)
             |> Dict.fromList
     , width = width
     , height = height
@@ -142,13 +142,13 @@ resolveConnection connection =
             vertexId
 
 
-toVertexId : Int -> Vertex -> VertexId
+toVertexId : Int -> VertexOnGrid -> VertexId
 toVertexId width ( i, j ) =
     i * width + j
 
 
-vertexById : Int -> VertexId -> Vertex
-vertexById width vertexId =
+vertexIdOnGrid : Int -> VertexId -> VertexOnGrid
+vertexIdOnGrid width vertexId =
     ( vertexId // width, modBy width vertexId )
 
 
@@ -162,9 +162,9 @@ isIntact connection =
             False
 
 
-vertices : Grid -> List Vertex
+vertices : Grid -> List VertexId
 vertices { adjacencyList, width } =
-    adjacencyList |> Dict.keys |> List.map (vertexById width)
+    Dict.keys adjacencyList
 
 
 edges : Grid -> List Edge
@@ -187,7 +187,7 @@ edges { width, height, adjacencyList } =
                 Dict.insert ( vertexA, vertexB ) intact dict
 
         makeEdge ( ( vertexA, vertexB ), intact ) =
-            Edge (vertexById width vertexA) (vertexById width vertexB) intact
+            Edge vertexA vertexB intact
     in
     adjacencyList
         |> Dict.keys
@@ -197,17 +197,9 @@ edges { width, height, adjacencyList } =
         |> List.map makeEdge
 
 
-
--- randomDirection : List Direction -> Random.Generator Direction
--- randomDirection directions =
---     Random.List.shuffle directions
-
-
-go : Grid -> Vertex -> (AdjacencyRecord -> Maybe VertexId) -> Maybe Vertex
-go { adjacencyList, width } fromVertex direction =
-    Dict.get (toVertexId width fromVertex) adjacencyList
-        |> Maybe.andThen direction
-        |> Maybe.map (vertexById width)
+go : Grid -> VertexId -> (AdjacencyRecord -> Maybe VertexId) -> Maybe VertexId
+go { adjacencyList, width } originVertexId direction =
+    Dict.get originVertexId adjacencyList |> Maybe.andThen direction
 
 
 randomListElement : a -> List a -> Random.Generator a
@@ -402,10 +394,10 @@ makeGame ({ adjacencyList, width } as grid) =
         |> Random.map
             (\( ( ( start, end ), path ), newAdjacencyList ) ->
                 ( { grid | adjacencyList = newAdjacencyList }
-                , { start = vertexById width start
-                  , end = vertexById width end
-                  , correctPath = List.reverse (List.map (vertexById width) (Maybe.withDefault [] path))
-                  , path = [ vertexById width start ]
+                , { start = start
+                  , end = end
+                  , correctPath = path |> Maybe.withDefault [] |> List.reverse
+                  , path = [ start ]
                   , finishingMove = adjacencyList |> Dict.get end |> Maybe.andThen missingDirection |> Maybe.withDefault North
                   }
                 )
