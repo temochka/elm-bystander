@@ -38,3 +38,4 @@ type Msg
     | KeyPress (Maybe Maze.Direction)
     | AiMove Time.Posix
     | NewGame
+    | Nop

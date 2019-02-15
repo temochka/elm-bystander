@@ -9,8 +9,8 @@ import Random
 import Time
 
 
-keyDecoder : Decode.Decoder Msg
-keyDecoder =
+cursorKeyDecoder : Decode.Decoder Msg
+cursorKeyDecoder =
     Decode.map (KeyPress << toDirection) (Decode.field "key" Decode.string)
 
 
@@ -20,17 +20,42 @@ toDirection string =
         "ArrowLeft" ->
             Just Maze.West
 
+        "a" ->
+            Just Maze.West
+
         "ArrowRight" ->
+            Just Maze.East
+
+        "d" ->
             Just Maze.East
 
         "ArrowDown" ->
             Just Maze.South
 
+        "s" ->
+            Just Maze.South
+
         "ArrowUp" ->
+            Just Maze.North
+
+        "w" ->
             Just Maze.North
 
         _ ->
             Nothing
+
+
+enterKeyDecoder : Decode.Decoder Msg
+enterKeyDecoder =
+    let
+        decodeEnter key =
+            if key == "Enter" then
+                NewGame
+
+            else
+                Nop
+    in
+    Decode.map decodeEnter (Decode.field "key" Decode.string)
 
 
 directionToAccessor : Maybe Maze.Direction -> (Maze.AdjacencyRecord -> Maybe Maze.VertexId)
@@ -145,11 +170,15 @@ update msg modelWithOldAnimations =
         NewGame ->
             newAs Player ()
 
+        Nop ->
+            ( model, Cmd.none )
+
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
     Sub.batch
-        [ Events.onKeyDown keyDecoder
+        [ Events.onKeyDown cursorKeyDecoder
+        , Events.onKeyDown enterKeyDecoder
         , Time.every 300.0 AiMove
         ]
 

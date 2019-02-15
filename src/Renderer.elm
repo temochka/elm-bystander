@@ -263,6 +263,6 @@ render model =
             , style "width" "80vmin"
             ]
             [ board model
-            , newGameButton "New game"
+            , newGameButton "New game ⏎"
             ]
         ]
