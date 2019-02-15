@@ -1,7 +1,6 @@
 module Game exposing (new, subscriptions, update)
 
 import Browser.Events as Events
-import Dict
 import Html.Events as Events
 import Json.Decode as Decode
 import Maze
@@ -67,7 +66,7 @@ nextAiMove grid game =
             Just game.finishingMove
 
         Just node ->
-            Dict.get currentNode grid.adjacencyList
+            Maze.getAdjacencyRecord currentNode grid.adjacencyList
                 |> Maybe.andThen (\record -> Maze.getDirection record node)
 
 
@@ -104,7 +103,7 @@ handleMove ({ player, maze } as model) game direction =
                         { model | animations = [ BlinkPath "red" ] }
 
         _ ->
-            { animations = [], maze = maze, player = player, gameState = Playing player game }
+            model
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )

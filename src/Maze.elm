@@ -1,4 +1,4 @@
-module Maze exposing (AdjacencyRecord, Direction(..), Edge(..), Game, Grid, VertexId, VertexOnGrid, edges, getDirection, go, makeGame, new, passConnection, vertexIdOnGrid, vertices)
+module Maze exposing (AdjacencyRecord, Direction(..), Edge(..), Game, Grid, VertexId, VertexOnGrid, edges, getAdjacencyRecord, getDirection, go, makeGame, new, passConnection, vertexIdOnGrid, vertices)
 
 import Debug
 import Dict exposing (Dict)
@@ -167,14 +167,18 @@ vertices { adjacencyList, width } =
     Dict.keys adjacencyList
 
 
+getAdjacencyRecord =
+    Dict.get
+
+
 edges : Grid -> List Edge
 edges { width, height, adjacencyList } =
     let
         vertexEdges vertexId =
-            [ Dict.get vertexId adjacencyList |> Maybe.andThen .north
-            , Dict.get vertexId adjacencyList |> Maybe.andThen .east
-            , Dict.get vertexId adjacencyList |> Maybe.andThen .south
-            , Dict.get vertexId adjacencyList |> Maybe.andThen .west
+            [ getAdjacencyRecord vertexId adjacencyList |> Maybe.andThen .north
+            , getAdjacencyRecord vertexId adjacencyList |> Maybe.andThen .east
+            , getAdjacencyRecord vertexId adjacencyList |> Maybe.andThen .south
+            , getAdjacencyRecord vertexId adjacencyList |> Maybe.andThen .west
             ]
                 |> List.filterMap identity
                 |> List.map (\connection -> ( ( vertexId, resolveConnection connection ), isIntact connection ))
@@ -199,7 +203,7 @@ edges { width, height, adjacencyList } =
 
 go : Grid -> VertexId -> (AdjacencyRecord -> Maybe VertexId) -> Maybe VertexId
 go { adjacencyList, width } originVertexId direction =
-    Dict.get originVertexId adjacencyList |> Maybe.andThen direction
+    getAdjacencyRecord originVertexId adjacencyList |> Maybe.andThen direction
 
 
 randomListElement : a -> List a -> Random.Generator a
@@ -225,7 +229,7 @@ randomEndPoint adjacencyList startVertexId =
         borders =
             adjacencyList
                 |> Dict.keys
-                |> List.filter (\v -> Dict.get v adjacencyList |> Maybe.map isBorder |> Maybe.withDefault False)
+                |> List.filter (\v -> getAdjacencyRecord v adjacencyList |> Maybe.map isBorder |> Maybe.withDefault False)
     in
     borders
         |> List.filter ((/=) startVertexId)
@@ -342,7 +346,7 @@ makeGame ({ adjacencyList, width } as grid) =
                 Random.constant Nothing
 
             else
-                Dict.get current adjacencyList
+                getAdjacencyRecord current adjacencyList
                     |> Maybe.map availableDirections
                     |> Maybe.withDefault []
                     |> Random.List.shuffle
@@ -357,8 +361,8 @@ makeGame ({ adjacencyList, width } as grid) =
             in
             if
                 Dict.member vertexId thePath
-                    && not (Dict.get vertexId thePath |> Maybe.map ((==) lastVertexId) |> Maybe.withDefault False)
-                    && not (Dict.get lastVertexId thePath |> Maybe.map ((==) vertexId) |> Maybe.withDefault False)
+                    && not (getAdjacencyRecord vertexId thePath |> Maybe.map ((==) lastVertexId) |> Maybe.withDefault False)
+                    && not (getAdjacencyRecord lastVertexId thePath |> Maybe.map ((==) vertexId) |> Maybe.withDefault False)
             then
                 State.modify (removeEdge (path |> List.head |> Maybe.withDefault -1) vertexId)
 
@@ -367,7 +371,7 @@ makeGame ({ adjacencyList, width } as grid) =
                     |> State.andThen
                         (\state ->
                             state
-                                |> Dict.get vertexId
+                                |> getAdjacencyRecord vertexId
                                 |> Maybe.map availableDirections
                                 |> Maybe.map (List.filter (\neighbor -> not (List.member neighbor path)))
                                 |> Maybe.withDefault []
