@@ -56,10 +56,6 @@ type alias Game =
     }
 
 
-type alias VisitedVertices =
-    Dict VertexId Bool
-
-
 type alias AdjacencyList =
     Dict VertexId AdjacencyRecord
 
@@ -315,10 +311,6 @@ removeEdge vertexIdA vertexIdB adjacencyList =
 makeGame : Grid -> Random.Generator ( Grid, Game )
 makeGame ({ adjacencyList, width } as grid) =
     let
-        visitedVertices : VisitedVertices
-        visitedVertices =
-            Dict.empty
-
         randomFind : (a -> Random.Generator (Maybe b)) -> List a -> Random.Generator (Maybe b)
         randomFind f list =
             case list of
@@ -379,8 +371,6 @@ makeGame ({ adjacencyList, width } as grid) =
                                 |> State.map (always ())
                         )
 
-        -- State.get
-        --     |> State.map (always ())
         carveGaps : List VertexId -> AdjacencyList
         carveGaps path =
             let
