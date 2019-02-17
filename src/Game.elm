@@ -62,16 +62,16 @@ directionToAccessor : Maybe Maze.Direction -> (Maze.AdjacencyRecord -> Maybe Maz
 directionToAccessor direction =
     case direction of
         Just Maze.West ->
-            \record -> record.west |> Maybe.andThen Maze.passConnection
+            \record -> record.west |> Maybe.andThen (Maze.passConnectionIf Maze.Intact)
 
         Just Maze.East ->
-            \record -> record.east |> Maybe.andThen Maze.passConnection
+            \record -> record.east |> Maybe.andThen (Maze.passConnectionIf Maze.Intact)
 
         Just Maze.North ->
-            \record -> record.north |> Maybe.andThen Maze.passConnection
+            \record -> record.north |> Maybe.andThen (Maze.passConnectionIf Maze.Intact)
 
         Just Maze.South ->
-            \record -> record.south |> Maybe.andThen Maze.passConnection
+            \record -> record.south |> Maybe.andThen (Maze.passConnectionIf Maze.Intact)
 
         Nothing ->
             always Nothing
