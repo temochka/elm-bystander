@@ -115,7 +115,7 @@ handleMove ({ player, maze } as model) game direction =
                         { model | gameState = Playing player { game | path = List.tail game.path |> Maybe.withDefault [] } }
 
                     else if List.member nextVertex game.path then
-                        { model | animations = [ BlinkPath "red" ] }
+                        { model | animations = [ BlinkPath "#89280E" ] }
 
                     else
                         { model | gameState = Playing player { game | path = nextVertex :: game.path } }
@@ -125,7 +125,7 @@ handleMove ({ player, maze } as model) game direction =
                         { model | gameState = Completed player game }
 
                     else
-                        { model | animations = [ BlinkPath "red" ] }
+                        { model | animations = [ BlinkPath "#89280E" ] }
 
         _ ->
             model
