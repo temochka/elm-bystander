@@ -435,7 +435,7 @@ placeExit adjacencyList minAcceptableLength path fromVertexId vertexId =
 
 
 carveLoops : AdjacencyList -> List VertexId -> VertexId -> AdjacencyList
-carveLoops adjacencyList solution fromVertexId =
+carveLoops adjacencyList solution startVertexId =
     let
         indexedSolution =
             solution
@@ -458,7 +458,7 @@ carveLoops adjacencyList solution fromVertexId =
                 List.concatMap (findDeadEnds (depth + 1) vertexId) directions
 
         deadEnds =
-            findDeadEnds 0 -1 fromVertexId
+            ( 1, startVertexId ) :: findDeadEnds 0 -1 startVertexId
 
         luckyDeadEnds =
             Random.step (deadEnds |> Random.List.shuffle) (Random.initialSeed 42)
@@ -470,7 +470,7 @@ carveLoops adjacencyList solution fromVertexId =
                 validShortcut =
                     indexedSolution
                         |> Dict.get vertexId
-                        |> Maybe.map (\solutionDepth -> solutionDepth > depth + 4)
+                        |> Maybe.map (\solutionDepth -> solutionDepth >= depth)
                         |> Maybe.withDefault True
             in
             if validShortcut then
