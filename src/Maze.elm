@@ -2,6 +2,7 @@ module Maze exposing (AdjacencyRecord, Connection(..), Direction(..), Edge(..), 
 
 import Dict exposing (Dict)
 import Random
+import Random.Extra
 import Random.List
 import Set exposing (Set)
 import State exposing (State)
@@ -239,11 +240,6 @@ isBorder { north, east, south, west } =
     north == Nothing || east == Nothing || south == Nothing || west == Nothing
 
 
-juxt : (a -> Random.Generator b) -> a -> Random.Generator ( a, b )
-juxt f x =
-    Random.map (\y -> ( x, y )) (f x)
-
-
 missingDirection : AdjacencyRecord -> Maybe Direction
 missingDirection record =
     if record.north == Nothing then
@@ -405,43 +401,54 @@ carvePaths fromVertexId vertexId =
         |> State.map (always ())
 
 
-placeExit : AdjacencyList -> Int -> List VertexId -> VertexId -> VertexId -> Maybe ( List Int, VertexId )
-placeExit adjacencyList minAcceptableLength path fromVertexId vertexId =
+buildRoute : AdjacencyList -> Int -> VertexId -> Maybe (List VertexId)
+buildRoute adjacencyList minAcceptableLength startVertexId =
     let
-        adjacencyRecord =
-            getAdjacencyRecord vertexId adjacencyList
+        bfs : Int -> List VertexId -> State (Dict VertexId (List VertexId)) (List (List VertexId))
+        bfs depth path =
+            let
+                vertexId =
+                    path |> List.head |> Maybe.withDefault -1
 
-        canBeExit =
-            adjacencyRecord
-                |> Maybe.map atBorder
-                |> Maybe.withDefault False
+                neighbors =
+                    adjacencyList |> getAdjacencyRecord vertexId |> Maybe.map passableDirections |> Maybe.withDefault [] |> List.map (\v -> v :: path)
 
-        currentEntry =
-            if canBeExit then
-                Just ( vertexId :: path, vertexId )
+                update distances =
+                    if Dict.member vertexId distances then
+                        State.put distances |> State.map (always [])
 
-            else
-                Nothing
+                    else
+                        State.put (Dict.insert vertexId path distances) |> State.map (always neighbors)
+            in
+            State.get |> State.andThen update
+
+        runner : Int -> Dict VertexId (List VertexId) -> List (List VertexId) -> Dict VertexId (List VertexId)
+        runner depth distances queue =
+            case queue of
+                [] ->
+                    distances
+
+                _ ->
+                    queue
+                        |> State.traverse (bfs depth)
+                        |> State.run distances
+                        |> (\( nextVertices, newDistances ) -> runner (depth + 1) newDistances (List.foldl (++) [] nextVertices))
+
+        vertexDistances =
+            runner 0 Dict.empty [ [ startVertexId ] ]
     in
-    adjacencyRecord
-        |> Maybe.map passableDirections
-        |> Maybe.withDefault []
-        |> List.filter ((/=) fromVertexId)
-        |> List.map (placeExit adjacencyList minAcceptableLength (vertexId :: path) vertexId)
-        |> List.sortBy (Maybe.map Tuple.first >> Maybe.withDefault [] >> List.length >> min minAcceptableLength)
+    vertexDistances
+        |> Dict.toList
+        |> List.sortBy (Tuple.second >> List.length >> min minAcceptableLength)
         |> List.reverse
+        |> List.map Tuple.second
+        |> List.filter (\solution -> solution |> List.head |> Maybe.andThen (\v -> getAdjacencyRecord v adjacencyList) |> Maybe.map atBorder |> Maybe.withDefault False)
         |> List.head
-        |> Maybe.withDefault currentEntry
 
 
-carveLoops : AdjacencyList -> List VertexId -> VertexId -> AdjacencyList
-carveLoops adjacencyList solution startVertexId =
+carveLoops : GeneratorState -> VertexId -> GeneratorState
+carveLoops ({ adjacencyList } as initialState) startVertexId =
     let
-        indexedSolution =
-            solution
-                |> List.indexedMap (\index vertexId -> ( vertexId, index + 1 ))
-                |> Dict.fromList
-
         findDeadEnds depth sourceVertexId vertexId =
             let
                 directions =
@@ -458,79 +465,71 @@ carveLoops adjacencyList solution startVertexId =
                 List.concatMap (findDeadEnds (depth + 1) vertexId) directions
 
         deadEnds =
-            ( 1, startVertexId ) :: findDeadEnds 0 -1 startVertexId
+            findDeadEnds 0 -1 startVertexId
 
-        luckyDeadEnds =
-            Random.step (deadEnds |> Random.List.shuffle) (Random.initialSeed 42)
-                |> Tuple.first
-                |> List.take (List.length deadEnds // 3)
-
-        maybeConnect aList depth deadEndVertexId vertexId =
-            let
-                validShortcut =
-                    indexedSolution
-                        |> Dict.get vertexId
-                        |> Maybe.map (\solutionDepth -> solutionDepth >= depth)
-                        |> Maybe.withDefault True
-            in
-            if validShortcut then
-                connectVertices deadEndVertexId vertexId aList
-
-            else
-                aList
-
-        carveLoop ( deadEnd, depth ) ( aList, seed ) =
+        carveLoop ( deadEnd, depth ) state =
             let
                 targetsGenerator =
-                    aList
+                    state.adjacencyList
                         |> getAdjacencyRecord deadEnd
                         |> Maybe.map impassableDirections
                         |> Maybe.withDefault []
                         |> Random.List.shuffle
 
                 ( shuffledTargets, newSeed ) =
-                    Random.step targetsGenerator seed
+                    Random.step targetsGenerator state.currentSeed
 
                 updatedList =
                     shuffledTargets
                         |> List.head
-                        |> Maybe.map (maybeConnect aList depth deadEnd)
-                        |> Maybe.withDefault aList
+                        |> Maybe.map (\vertexId -> connectVertices deadEnd vertexId state.adjacencyList)
+                        |> Maybe.withDefault state.adjacencyList
             in
-            ( updatedList, newSeed )
+            { state | adjacencyList = updatedList, currentSeed = newSeed }
     in
-    luckyDeadEnds
-        |> List.foldl carveLoop ( adjacencyList, Random.initialSeed 42 )
-        |> Tuple.first
+    deadEnds
+        |> List.foldl carveLoop initialState
 
 
 makeGame : Grid -> Random.Generator ( Grid, Game )
-makeGame ({ adjacencyList, width } as grid) =
+makeGame grid =
     let
-        chiselHelper ( startVertexId, seed ) =
-            carvePaths -1 startVertexId
-                |> State.finalState { adjacencyList = adjacencyList, currentSeed = Random.initialSeed seed }
-                |> Random.constant
-    in
-    randomStartPoint adjacencyList
-        |> Random.andThen (juxt (always (Random.int 0 9999)))
-        |> Random.andThen (juxt chiselHelper)
-        |> Random.andThen (juxt (\( ( start, _ ), generatorResult ) -> Random.constant (placeExit generatorResult.adjacencyList (width * 3) [] -1 start)))
-        |> Random.map
-            (\( ( ( start, _ ), generatorResult ), maybeEnd ) ->
-                let
-                    end =
-                        maybeEnd |> Maybe.map Tuple.second |> Maybe.withDefault -1
+        builder state =
+            let
+                { adjacencyList, currentSeed } =
+                    carvePaths -1 state.start |> State.finalState { adjacencyList = state.adjacencyList, currentSeed = state.seed }
+            in
+            { state | adjacencyList = adjacencyList, seed = currentSeed }
 
-                    solution =
-                        maybeEnd |> Maybe.map Tuple.first |> Maybe.withDefault [] |> List.reverse
-                in
-                ( { grid | adjacencyList = carveLoops generatorResult.adjacencyList solution start }
-                , { start = start
-                  , end = end
-                  , correctPath = solution
-                  , path = [ start ]
-                  , finishingMove = generatorResult.adjacencyList |> Dict.get end |> Maybe.andThen missingDirection |> Maybe.withDefault North
-                  }
-                )
+        looper state =
+            let
+                { adjacencyList, currentSeed } =
+                    carveLoops { adjacencyList = state.adjacencyList, currentSeed = state.seed } state.start
+            in
+            { state | adjacencyList = adjacencyList, seed = currentSeed }
+
+        solver state =
+            let
+                solution =
+                    buildRoute state.adjacencyList (grid.width * 3) state.start |> Maybe.withDefault []
+            in
+            { state | solution = solution }
+
+        packer state =
+            let
+                end =
+                    List.head state.solution |> Maybe.withDefault -1
+            in
+            ( { grid | adjacencyList = state.adjacencyList }
+            , { start = state.start
+              , end = end
+              , correctPath = List.reverse state.solution
+              , path = [ state.start ]
+              , finishingMove = state.adjacencyList |> Dict.get end |> Maybe.andThen missingDirection |> Maybe.withDefault North
+              }
             )
+    in
+    Random.int 42 99999999999
+        |> Random.map2 (\start seed -> { solution = [], adjacencyList = grid.adjacencyList, start = start, seed = Random.initialSeed seed })
+            (randomStartPoint grid.adjacencyList)
+        |> Random.map (builder >> looper >> solver >> packer)
