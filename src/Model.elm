@@ -1,4 +1,4 @@
-module Model exposing (Animation(..), GameState(..), Model, Msg(..), Player(..))
+module Model exposing (Animation(..), GameState(..), Level, Model, Msg(..), Player(..))
 
 import Maze
 import Random
@@ -8,6 +8,10 @@ import Time
 type Player
     = Ai
     | Player
+
+
+type alias Level =
+    Int
 
 
 type GameState
@@ -25,6 +29,7 @@ type alias Model =
     , gameState : GameState
     , animations : List Animation
     , player : Player
+    , level : Level
     }
 
 
@@ -38,4 +43,6 @@ type Msg
     | KeyPress (Maybe Maze.Direction)
     | AiMove Time.Posix
     | NewGame
+    | NextLevel
+    | PressedEnter
     | Nop

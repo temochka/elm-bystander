@@ -45,17 +45,24 @@ toDirection string =
             Nothing
 
 
-enterKeyDecoder : Decode.Decoder Msg
-enterKeyDecoder =
+menuKeyDecoder : Decode.Decoder Msg
+menuKeyDecoder =
     let
-        decodeEnter key =
-            if key == "Enter" then
-                NewGame
+        decoder key =
+            case key of
+                "Enter" ->
+                    PressedEnter
 
-            else
-                Nop
+                "r" ->
+                    NewGame
+
+                "+" ->
+                    NextLevel
+
+                _ ->
+                    Nop
     in
-    Decode.map decodeEnter (Decode.field "key" Decode.string)
+    Decode.map decoder (Decode.field "key" Decode.string)
 
 
 directionToAccessor : Maybe Maze.Direction -> (Maze.AdjacencyRecord -> Maybe Maze.VertexId)
@@ -152,6 +159,28 @@ update msg modelWithOldAnimations =
                 _ ->
                     ( model, Cmd.none )
 
+        NextLevel ->
+            case model.gameState of
+                Playing Player game ->
+                    newAs Player (model.level + 1) ()
+
+                Completed Player game ->
+                    newAs Player (model.level + 1) ()
+
+                Playing Ai game ->
+                    newAs Ai (model.level + 1) ()
+
+                _ ->
+                    ( model, Cmd.none )
+
+        PressedEnter ->
+            case model.gameState of
+                Completed Player game ->
+                    update NextLevel model
+
+                _ ->
+                    update NewGame model
+
         AiMove _ ->
             case model.gameState of
                 Playing Ai game ->
@@ -162,13 +191,13 @@ update msg modelWithOldAnimations =
                     ( handleMove model game nextMove, Cmd.none )
 
                 Completed Ai _ ->
-                    newAs Ai ()
+                    newAs Ai (model.level + 1) ()
 
                 _ ->
                     ( model, Cmd.none )
 
         NewGame ->
-            newAs Player ()
+            newAs Player 2 ()
 
         Nop ->
             ( model, Cmd.none )
@@ -178,19 +207,19 @@ subscriptions : Model -> Sub Msg
 subscriptions model =
     Sub.batch
         [ Events.onKeyDown cursorKeyDecoder
-        , Events.onKeyDown enterKeyDecoder
+        , Events.onKeyDown menuKeyDecoder
         , Time.every 300.0 AiMove
         ]
 
 
-newAs : Player -> () -> ( Model, Cmd Msg )
-newAs player _ =
+newAs : Player -> Level -> () -> ( Model, Cmd Msg )
+newAs player level _ =
     let
         maze =
-            Maze.new 6 6
+            Maze.new level level
     in
-    ( { maze = maze, gameState = Loading, animations = [], player = player }, Random.generate SetGame (Maze.makeGame maze) )
+    ( { maze = maze, gameState = Loading, animations = [], level = level, player = player }, Random.generate SetGame (Maze.makeGame maze) )
 
 
 new =
-    newAs Ai
+    newAs Ai 2

@@ -29,11 +29,27 @@ completedPathColor =
     "#FFFFFF"
 
 
+canvasSide =
+    100
+
+
 board : Model -> Html Msg
 board { maze, gameState, animations } =
     let
+        maxCellWidth =
+            canvasSide / toFloat (max maze.width maze.height - 1)
+
+        paddingModifier =
+            min (0.4 + logBase 2 (toFloat (max maze.width maze.height)) / 10) 0.95
+
         cellWidth =
-            85 / toFloat maze.width
+            paddingModifier * maxCellWidth
+
+        paddingTop =
+            (canvasSide - cellWidth * toFloat (maze.height - 1)) / 2
+
+        paddingLeft =
+            (canvasSide - cellWidth * toFloat (maze.width - 1)) / 2
 
         strokeWidth =
             cellWidth / 5
@@ -44,8 +60,8 @@ board { maze, gameState, animations } =
                     Maze.vertexIdOnGrid maze.width startVertexId
             in
             [ Svg.circle
-                [ Svg.Attributes.cx (String.fromFloat (cellWidth + cellWidth * toFloat col))
-                , Svg.Attributes.cy (String.fromFloat (cellWidth + cellWidth * toFloat row))
+                [ Svg.Attributes.cx (String.fromFloat (paddingLeft + cellWidth * toFloat col))
+                , Svg.Attributes.cy (String.fromFloat (paddingTop + cellWidth * toFloat row))
                 , Svg.Attributes.r (String.fromFloat (cellWidth / 4))
                 , Svg.Attributes.fill gridColor
                 ]
@@ -70,7 +86,7 @@ board { maze, gameState, animations } =
         renderTail endVertexId finishingMove color =
             endVertexId
                 |> Maze.vertexIdOnGrid maze.width
-                |> appendix cellWidth strokeWidth color (finishingDirection finishingMove)
+                |> appendix paddingLeft paddingTop cellWidth strokeWidth color (finishingDirection finishingMove)
                 |> List.singleton
 
         renderEdges =
@@ -102,10 +118,10 @@ board { maze, gameState, animations } =
                             y2 - y1
                     in
                     [ Svg.line
-                        [ Svg.Attributes.x1 (String.fromFloat (cellWidth + x1))
-                        , Svg.Attributes.y1 (String.fromFloat (cellWidth + y1))
-                        , Svg.Attributes.x2 (String.fromFloat (cellWidth + x2))
-                        , Svg.Attributes.y2 (String.fromFloat (cellWidth + y2))
+                        [ Svg.Attributes.x1 (String.fromFloat (paddingLeft + x1))
+                        , Svg.Attributes.y1 (String.fromFloat (paddingTop + y1))
+                        , Svg.Attributes.x2 (String.fromFloat (paddingLeft + x2))
+                        , Svg.Attributes.y2 (String.fromFloat (paddingTop + y2))
                         , Svg.Attributes.stroke gridColor
                         , Svg.Attributes.strokeWidth (String.fromFloat strokeWidth)
                         , Svg.Attributes.strokeLinecap "round"
@@ -114,12 +130,12 @@ board { maze, gameState, animations } =
                     ]
                         ++ (if not intact then
                                 [ Svg.line
-                                    [ Svg.Attributes.x1 (String.fromFloat (cellWidth + x1 + dx * (2 / 5)))
-                                    , Svg.Attributes.y1 (String.fromFloat (cellWidth + y1 + dy * (2 / 5)))
-                                    , Svg.Attributes.x2 (String.fromFloat (cellWidth + x2 - dx * (2 / 5)))
-                                    , Svg.Attributes.y2 (String.fromFloat (cellWidth + y2 - dy * (2 / 5)))
+                                    [ Svg.Attributes.x1 (String.fromFloat (paddingLeft + x1 + dx * (2 / 5)))
+                                    , Svg.Attributes.y1 (String.fromFloat (paddingTop + y1 + dy * (2 / 5)))
+                                    , Svg.Attributes.x2 (String.fromFloat (paddingLeft + x2 - dx * (2 / 5)))
+                                    , Svg.Attributes.y2 (String.fromFloat (paddingTop + y2 - dy * (2 / 5)))
                                     , Svg.Attributes.stroke boardColor
-                                    , Svg.Attributes.strokeWidth (String.fromFloat (1.1 * strokeWidth))
+                                    , Svg.Attributes.strokeWidth (String.fromFloat (1.2 * strokeWidth))
                                     ]
                                     []
                                 ]
@@ -136,8 +152,8 @@ board { maze, gameState, animations } =
                 |> Maybe.map
                     (\( row, col ) ->
                         [ Svg.circle
-                            [ Svg.Attributes.cx (String.fromFloat (cellWidth + cellWidth * toFloat col))
-                            , Svg.Attributes.cy (String.fromFloat (cellWidth + cellWidth * toFloat row))
+                            [ Svg.Attributes.cx (String.fromFloat (paddingLeft + cellWidth * toFloat col))
+                            , Svg.Attributes.cy (String.fromFloat (paddingTop + cellWidth * toFloat row))
                             , Svg.Attributes.r (String.fromFloat (cellWidth / 4))
                             ]
                             []
@@ -162,10 +178,10 @@ board { maze, gameState, animations } =
                     ++ List.map
                         (\( ( rowA, colA ), ( rowB, colB ) ) ->
                             Svg.line
-                                [ Svg.Attributes.x1 (String.fromFloat (cellWidth + (cellWidth * toFloat colA)))
-                                , Svg.Attributes.y1 (String.fromFloat (cellWidth + (cellWidth * toFloat rowA)))
-                                , Svg.Attributes.x2 (String.fromFloat (cellWidth + (cellWidth * toFloat colB)))
-                                , Svg.Attributes.y2 (String.fromFloat (cellWidth + (cellWidth * toFloat rowB)))
+                                [ Svg.Attributes.x1 (String.fromFloat (paddingLeft + (cellWidth * toFloat colA)))
+                                , Svg.Attributes.y1 (String.fromFloat (paddingTop + (cellWidth * toFloat rowA)))
+                                , Svg.Attributes.x2 (String.fromFloat (paddingLeft + (cellWidth * toFloat colB)))
+                                , Svg.Attributes.y2 (String.fromFloat (paddingTop + (cellWidth * toFloat rowB)))
                                 , Svg.Attributes.strokeWidth (String.fromFloat strokeWidth)
                                 , Svg.Attributes.strokeLinecap "round"
                                 ]
@@ -216,18 +232,41 @@ board { maze, gameState, animations } =
         )
 
 
-appendix : Float -> Float -> String -> ( Int, Int ) -> Maze.VertexOnGrid -> Html Msg
-appendix cellWidth strokeWidth strokeColor ( tailVectorX, tailVectorY ) ( row, col ) =
+appendix : Float -> Float -> Float -> Float -> String -> ( Int, Int ) -> Maze.VertexOnGrid -> Html Msg
+appendix paddingLeft paddingTop cellWidth strokeWidth strokeColor ( tailVectorX, tailVectorY ) ( row, col ) =
     Svg.line
-        [ Svg.Attributes.x1 (String.fromFloat (cellWidth + (cellWidth * toFloat col)))
-        , Svg.Attributes.y1 (String.fromFloat (cellWidth + (cellWidth * toFloat row)))
-        , Svg.Attributes.x2 (String.fromFloat (cellWidth + (cellWidth * toFloat col + toFloat (5 * tailVectorX))))
-        , Svg.Attributes.y2 (String.fromFloat (cellWidth + (cellWidth * toFloat row + toFloat (5 * tailVectorY))))
+        [ Svg.Attributes.x1 (String.fromFloat (paddingLeft + (cellWidth * toFloat col)))
+        , Svg.Attributes.y1 (String.fromFloat (paddingTop + (cellWidth * toFloat row)))
+        , Svg.Attributes.x2 (String.fromFloat (paddingLeft + (cellWidth * toFloat col + (0.3 * cellWidth * toFloat tailVectorX))))
+        , Svg.Attributes.y2 (String.fromFloat (paddingTop + (cellWidth * toFloat row + (0.3 * cellWidth * toFloat tailVectorY))))
         , Svg.Attributes.stroke strokeColor
         , Svg.Attributes.strokeWidth (String.fromFloat strokeWidth)
         , Svg.Attributes.strokeLinecap "round"
         ]
         []
+
+
+nextLevelButton : String -> Bool -> Html Msg
+nextLevelButton label enabled =
+    Html.button
+        [ onClick
+            (if enabled then
+                NextLevel
+
+             else
+                Nop
+            )
+        , style "background-color" "#F88B33"
+        , style "border" "none"
+        , style "border-radius" "0.1em"
+        , style "font-family" "Georgia, Times New Roman, serif"
+        , style "font-size" "2em"
+        , style "color" "#FCF2E8"
+        , style "display" "inline-block"
+        , style "padding" "0.2em 0.4em"
+        , style "margin-top" "0.5em"
+        ]
+        [ Html.text label ]
 
 
 newGameButton : String -> Html Msg
@@ -249,6 +288,18 @@ newGameButton label =
 
 render : Model -> Html Msg
 render model =
+    let
+        buttons =
+            case model.gameState of
+                Playing Player _ ->
+                    [ newGameButton "New game ⓡ" ]
+
+                Completed Player _ ->
+                    [ nextLevelButton "Next Level ⏎" True ]
+
+                _ ->
+                    [ newGameButton "New game ⏎" ]
+    in
     Html.div
         [ style "position" "absolute"
         , style "top" "0"
@@ -262,7 +313,5 @@ render model =
             [ style "margin" "5vmin auto"
             , style "width" "80vmin"
             ]
-            [ board model
-            , newGameButton "New game ⏎"
-            ]
+            (board model :: buttons)
         ]
