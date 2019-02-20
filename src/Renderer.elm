@@ -1,4 +1,4 @@
-module Renderer exposing (render)
+module Renderer exposing (board, getDimensions, gridColor, objects, pathColor, pathOnGrid, render, renderEdges, renderPath, renderStartNode)
 
 import Html exposing (Html, button, div, span, text)
 import Html.Attributes exposing (style)
@@ -7,6 +7,46 @@ import Maze
 import Model exposing (..)
 import Svg
 import Svg.Attributes
+
+
+type alias Dimensions =
+    { cellWidth : Float
+    , paddingTop : Float
+    , paddingLeft : Float
+    , strokeWidth : Float
+    , width : Int
+    , height : Int
+    }
+
+
+getDimensions : Maze.Grid -> Dimensions
+getDimensions { width, height } =
+    let
+        maxCellWidth =
+            canvasSide / toFloat (max width height - 1)
+
+        paddingModifier =
+            min (0.4 + logBase 2 (toFloat (max width height)) / 10) 0.95
+
+        cellWidth =
+            paddingModifier * maxCellWidth
+
+        paddingTop =
+            (canvasSide - cellWidth * toFloat (height - 1)) / 2
+
+        paddingLeft =
+            (canvasSide - cellWidth * toFloat (width - 1)) / 2
+
+        strokeWidth =
+            cellWidth / 5
+    in
+    { width = width
+    , height = height
+    , cellWidth = cellWidth
+    , paddingTop = paddingTop
+    , paddingLeft = paddingLeft
+    , strokeWidth = strokeWidth
+    }
 
 
 backgroundColor =
@@ -33,188 +73,185 @@ canvasSide =
     100
 
 
-board : Model -> Html Msg
-board { maze, gameState, animations } =
+finishingDirection : Maze.Direction -> ( Int, Int )
+finishingDirection direction =
+    case direction of
+        Maze.North ->
+            ( 0, -1 )
+
+        Maze.East ->
+            ( 1, 0 )
+
+        Maze.South ->
+            ( 0, 1 )
+
+        Maze.West ->
+            ( -1, 0 )
+
+
+renderStartNode : Dimensions -> Maze.VertexId -> List (Html msg)
+renderStartNode { width, height, cellWidth, paddingTop, paddingLeft, strokeWidth } startVertexId =
     let
-        maxCellWidth =
-            canvasSide / toFloat (max maze.width maze.height - 1)
+        ( row, col ) =
+            Maze.vertexIdOnGrid width startVertexId
+    in
+    [ Svg.circle
+        [ Svg.Attributes.cx (String.fromFloat (paddingLeft + cellWidth * toFloat col))
+        , Svg.Attributes.cy (String.fromFloat (paddingTop + cellWidth * toFloat row))
+        , Svg.Attributes.r (String.fromFloat (cellWidth / 4))
+        , Svg.Attributes.fill gridColor
+        ]
+        []
+    ]
 
-        paddingModifier =
-            min (0.4 + logBase 2 (toFloat (max maze.width maze.height)) / 10) 0.95
 
-        cellWidth =
-            paddingModifier * maxCellWidth
+renderTail : Dimensions -> Maze.VertexId -> Maze.Direction -> String -> List (Html Msg)
+renderTail { width, paddingLeft, paddingTop, cellWidth, strokeWidth } endVertexId finishingMove color =
+    endVertexId
+        |> Maze.vertexIdOnGrid width
+        |> appendix paddingLeft paddingTop cellWidth strokeWidth color (finishingDirection finishingMove)
+        |> List.singleton
 
-        paddingTop =
-            (canvasSide - cellWidth * toFloat (maze.height - 1)) / 2
 
-        paddingLeft =
-            (canvasSide - cellWidth * toFloat (maze.width - 1)) / 2
-
-        strokeWidth =
-            cellWidth / 5
-
-        renderStartNode startVertexId =
+renderEdges : Dimensions -> String -> List Maze.Edge -> List (Html msg)
+renderEdges { width, height, cellWidth, paddingLeft, paddingTop, strokeWidth } color edges =
+    List.concatMap
+        (\(Maze.Edge vertexIdA vertexIdB intact) ->
             let
-                ( row, col ) =
-                    Maze.vertexIdOnGrid maze.width startVertexId
+                ( rowA, colA ) =
+                    Maze.vertexIdOnGrid width vertexIdA
+
+                ( rowB, colB ) =
+                    Maze.vertexIdOnGrid width vertexIdB
+
+                x1 =
+                    cellWidth * toFloat colA
+
+                y1 =
+                    cellWidth * toFloat rowA
+
+                x2 =
+                    cellWidth * toFloat colB
+
+                y2 =
+                    cellWidth * toFloat rowB
+
+                dx =
+                    x2 - x1
+
+                dy =
+                    y2 - y1
             in
-            [ Svg.circle
-                [ Svg.Attributes.cx (String.fromFloat (paddingLeft + cellWidth * toFloat col))
-                , Svg.Attributes.cy (String.fromFloat (paddingTop + cellWidth * toFloat row))
-                , Svg.Attributes.r (String.fromFloat (cellWidth / 4))
-                , Svg.Attributes.fill gridColor
+            [ Svg.line
+                [ Svg.Attributes.x1 (String.fromFloat (paddingLeft + x1))
+                , Svg.Attributes.y1 (String.fromFloat (paddingTop + y1))
+                , Svg.Attributes.x2 (String.fromFloat (paddingLeft + x2))
+                , Svg.Attributes.y2 (String.fromFloat (paddingTop + y2))
+                , Svg.Attributes.stroke color
+                , Svg.Attributes.strokeWidth (String.fromFloat strokeWidth)
+                , Svg.Attributes.strokeLinecap "round"
                 ]
                 []
             ]
+                ++ (if not intact then
+                        [ Svg.line
+                            [ Svg.Attributes.x1 (String.fromFloat (paddingLeft + x1 + dx * (2 / 5)))
+                            , Svg.Attributes.y1 (String.fromFloat (paddingTop + y1 + dy * (2 / 5)))
+                            , Svg.Attributes.x2 (String.fromFloat (paddingLeft + x2 - dx * (2 / 5)))
+                            , Svg.Attributes.y2 (String.fromFloat (paddingTop + y2 - dy * (2 / 5)))
+                            , Svg.Attributes.stroke boardColor
+                            , Svg.Attributes.strokeWidth (String.fromFloat (1.2 * strokeWidth))
+                            ]
+                            []
+                        ]
 
-        finishingDirection : Maze.Direction -> ( Int, Int )
-        finishingDirection direction =
-            case direction of
-                Maze.North ->
-                    ( 0, -1 )
+                    else
+                        []
+                   )
+        )
+        edges
 
-                Maze.East ->
-                    ( 1, 0 )
 
-                Maze.South ->
-                    ( 0, 1 )
+renderPathHead : Dimensions -> List Maze.VertexOnGrid -> List (Html msg)
+renderPathHead { cellWidth, paddingLeft, paddingTop, strokeWidth } path =
+    path
+        |> List.reverse
+        |> List.head
+        |> Maybe.map
+            (\( row, col ) ->
+                [ Svg.circle
+                    [ Svg.Attributes.cx (String.fromFloat (paddingLeft + cellWidth * toFloat col))
+                    , Svg.Attributes.cy (String.fromFloat (paddingTop + cellWidth * toFloat row))
+                    , Svg.Attributes.r (String.fromFloat (cellWidth / 4))
+                    ]
+                    []
+                ]
+            )
+        |> Maybe.withDefault []
 
-                Maze.West ->
-                    ( -1, 0 )
 
-        renderTail endVertexId finishingMove color =
-            endVertexId
-                |> Maze.vertexIdOnGrid maze.width
-                |> appendix paddingLeft paddingTop cellWidth strokeWidth color (finishingDirection finishingMove)
-                |> List.singleton
+renderPath : Dimensions -> String -> Maybe String -> List Maze.VertexOnGrid -> List (Html msg)
+renderPath ({ cellWidth, paddingLeft, paddingTop, strokeWidth } as dimensions) color blink path =
+    [ Svg.g
+        [ Svg.Attributes.id "pathAnimation"
+        , Svg.Attributes.stroke color
+        , Svg.Attributes.fill color
+        , Svg.Attributes.class
+            (if blink == Nothing then
+                ""
 
-        renderEdges =
-            List.concatMap
-                (\(Maze.Edge vertexIdA vertexIdB intact) ->
-                    let
-                        ( rowA, colA ) =
-                            Maze.vertexIdOnGrid maze.width vertexIdA
-
-                        ( rowB, colB ) =
-                            Maze.vertexIdOnGrid maze.width vertexIdB
-
-                        x1 =
-                            cellWidth * toFloat colA
-
-                        y1 =
-                            cellWidth * toFloat rowA
-
-                        x2 =
-                            cellWidth * toFloat colB
-
-                        y2 =
-                            cellWidth * toFloat rowB
-
-                        dx =
-                            x2 - x1
-
-                        dy =
-                            y2 - y1
-                    in
-                    [ Svg.line
-                        [ Svg.Attributes.x1 (String.fromFloat (paddingLeft + x1))
-                        , Svg.Attributes.y1 (String.fromFloat (paddingTop + y1))
-                        , Svg.Attributes.x2 (String.fromFloat (paddingLeft + x2))
-                        , Svg.Attributes.y2 (String.fromFloat (paddingTop + y2))
-                        , Svg.Attributes.stroke gridColor
+             else
+                "animatedPath"
+            )
+        ]
+        (renderPathHead dimensions path
+            ++ List.map
+                (\( ( rowA, colA ), ( rowB, colB ) ) ->
+                    Svg.line
+                        [ Svg.Attributes.x1 (String.fromFloat (paddingLeft + (cellWidth * toFloat colA)))
+                        , Svg.Attributes.y1 (String.fromFloat (paddingTop + (cellWidth * toFloat rowA)))
+                        , Svg.Attributes.x2 (String.fromFloat (paddingLeft + (cellWidth * toFloat colB)))
+                        , Svg.Attributes.y2 (String.fromFloat (paddingTop + (cellWidth * toFloat rowB)))
                         , Svg.Attributes.strokeWidth (String.fromFloat strokeWidth)
                         , Svg.Attributes.strokeLinecap "round"
                         ]
                         []
-                    ]
-                        ++ (if not intact then
-                                [ Svg.line
-                                    [ Svg.Attributes.x1 (String.fromFloat (paddingLeft + x1 + dx * (2 / 5)))
-                                    , Svg.Attributes.y1 (String.fromFloat (paddingTop + y1 + dy * (2 / 5)))
-                                    , Svg.Attributes.x2 (String.fromFloat (paddingLeft + x2 - dx * (2 / 5)))
-                                    , Svg.Attributes.y2 (String.fromFloat (paddingTop + y2 - dy * (2 / 5)))
-                                    , Svg.Attributes.stroke boardColor
-                                    , Svg.Attributes.strokeWidth (String.fromFloat (1.2 * strokeWidth))
-                                    ]
-                                    []
-                                ]
-
-                            else
-                                []
-                           )
                 )
-                (Maze.edges maze)
+                (List.map2 Tuple.pair path (Maybe.withDefault [] (List.tail path)))
+            ++ [ Svg.animate [ Svg.Attributes.attributeType "XML", Svg.Attributes.attributeName "stroke", Svg.Attributes.from (blink |> Maybe.withDefault color), Svg.Attributes.to color, Svg.Attributes.dur "1s", Svg.Attributes.repeatCount "1", Svg.Attributes.begin "pathAnimation.DOMSubtreeModified" ] []
+               , Svg.animate [ Svg.Attributes.attributeType "XML", Svg.Attributes.attributeName "fill", Svg.Attributes.from (blink |> Maybe.withDefault color), Svg.Attributes.to color, Svg.Attributes.dur "1s", Svg.Attributes.repeatCount "1", Svg.Attributes.begin "pathAnimation.DOMSubtreeModified" ] []
+               ]
+        )
+    ]
 
-        renderPathHead path =
-            List.reverse path
-                |> List.head
-                |> Maybe.map
-                    (\( row, col ) ->
-                        [ Svg.circle
-                            [ Svg.Attributes.cx (String.fromFloat (paddingLeft + cellWidth * toFloat col))
-                            , Svg.Attributes.cy (String.fromFloat (paddingTop + cellWidth * toFloat row))
-                            , Svg.Attributes.r (String.fromFloat (cellWidth / 4))
-                            ]
-                            []
-                        ]
-                    )
-                |> Maybe.withDefault []
 
-        renderPath path color blink =
-            [ Svg.g
-                [ Svg.Attributes.id "pathAnimation"
-                , Svg.Attributes.stroke color
-                , Svg.Attributes.fill color
-                , Svg.Attributes.class
-                    (if blink == Nothing then
-                        ""
+pathOnGrid : Dimensions -> List Maze.VertexId -> List Maze.VertexOnGrid
+pathOnGrid dimensions =
+    List.map (Maze.vertexIdOnGrid dimensions.width)
 
-                     else
-                        "animatedPath"
-                    )
-                ]
-                (renderPathHead path
-                    ++ List.map
-                        (\( ( rowA, colA ), ( rowB, colB ) ) ->
-                            Svg.line
-                                [ Svg.Attributes.x1 (String.fromFloat (paddingLeft + (cellWidth * toFloat colA)))
-                                , Svg.Attributes.y1 (String.fromFloat (paddingTop + (cellWidth * toFloat rowA)))
-                                , Svg.Attributes.x2 (String.fromFloat (paddingLeft + (cellWidth * toFloat colB)))
-                                , Svg.Attributes.y2 (String.fromFloat (paddingTop + (cellWidth * toFloat rowB)))
-                                , Svg.Attributes.strokeWidth (String.fromFloat strokeWidth)
-                                , Svg.Attributes.strokeLinecap "round"
-                                ]
-                                []
-                        )
-                        (List.map2 Tuple.pair path (Maybe.withDefault [] (List.tail path)))
-                    ++ [ Svg.animate [ Svg.Attributes.attributeType "XML", Svg.Attributes.attributeName "stroke", Svg.Attributes.from (blink |> Maybe.withDefault color), Svg.Attributes.to color, Svg.Attributes.dur "1s", Svg.Attributes.repeatCount "1", Svg.Attributes.begin "pathAnimation.DOMSubtreeModified" ] []
-                       , Svg.animate [ Svg.Attributes.attributeType "XML", Svg.Attributes.attributeName "fill", Svg.Attributes.from (blink |> Maybe.withDefault color), Svg.Attributes.to color, Svg.Attributes.dur "1s", Svg.Attributes.repeatCount "1", Svg.Attributes.begin "pathAnimation.DOMSubtreeModified" ] []
-                       ]
-                )
-            ]
 
-        pathOnGrid path =
-            path |> List.map (Maze.vertexIdOnGrid maze.width)
+objects : Dimensions -> Model -> List (Html Msg)
+objects dimensions { gameState, animations, maze } =
+    case gameState of
+        Loading ->
+            []
 
-        objects =
-            case gameState of
-                Loading ->
-                    []
+        Playing _ game ->
+            renderStartNode dimensions game.start
+                ++ renderEdges dimensions gridColor (Maze.edges maze)
+                ++ renderTail dimensions game.end game.finishingMove gridColor
+                ++ renderPath dimensions pathColor (List.head animations |> Maybe.map (\(BlinkPath color) -> color)) (pathOnGrid dimensions game.path)
 
-                Playing _ game ->
-                    renderStartNode game.start
-                        ++ renderEdges
-                        ++ renderTail game.end game.finishingMove gridColor
-                        ++ renderPath (pathOnGrid game.path) pathColor (List.head animations |> Maybe.map (\(BlinkPath color) -> color))
+        Completed _ game ->
+            renderStartNode dimensions game.start
+                ++ renderEdges dimensions gridColor (Maze.edges maze)
+                ++ renderTail dimensions game.end game.finishingMove pathColor
+                ++ renderPath dimensions completedPathColor Nothing (pathOnGrid dimensions game.path)
+                ++ renderTail dimensions game.end game.finishingMove completedPathColor
 
-                Completed _ game ->
-                    renderStartNode game.start
-                        ++ renderEdges
-                        ++ renderTail game.end game.finishingMove pathColor
-                        ++ renderPath (pathOnGrid game.path) completedPathColor Nothing
-                        ++ renderTail game.end game.finishingMove completedPathColor
-    in
+
+board : List (Html msg) -> Html msg
+board entities =
     Svg.svg
         [ Svg.Attributes.viewBox "0 0 100 100"
         ]
@@ -228,11 +265,11 @@ board { maze, gameState, animations } =
             , Svg.Attributes.fill boardColor
             ]
             []
-            :: objects
+            :: entities
         )
 
 
-appendix : Float -> Float -> Float -> Float -> String -> ( Int, Int ) -> Maze.VertexOnGrid -> Html Msg
+appendix : Float -> Float -> Float -> Float -> String -> ( Int, Int ) -> Maze.VertexOnGrid -> Html msg
 appendix paddingLeft paddingTop cellWidth strokeWidth strokeColor ( tailVectorX, tailVectorY ) ( row, col ) =
     Svg.line
         [ Svg.Attributes.x1 (String.fromFloat (paddingLeft + (cellWidth * toFloat col)))
@@ -299,6 +336,9 @@ render model =
 
                 _ ->
                     [ newGameButton "New game ⏎" ]
+
+        dimensions =
+            getDimensions model.maze
     in
     Html.div
         [ style "position" "absolute"
@@ -313,5 +353,5 @@ render model =
             [ style "margin" "5vmin auto"
             , style "width" "80vmin"
             ]
-            (board model :: buttons)
+            (board (objects dimensions model) :: buttons)
         ]

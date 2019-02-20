@@ -1,4 +1,4 @@
-module Maze exposing (AdjacencyRecord, Connection(..), Direction(..), Edge(..), Game, Grid, VertexId, VertexOnGrid, edges, getAdjacencyRecord, getDirection, go, makeGame, new, passConnectionIf, vertexIdOnGrid, vertices)
+module Maze exposing (AdjacencyList, AdjacencyRecord, Connection(..), Direction(..), Edge(..), Game, Grid, VertexId, VertexOnGrid, carveLoops, carvePaths, edges, getAdjacencyRecord, getDirection, go, makeGame, new, passConnectionIf, passableDirections, randomStartPoint, vertexIdOnGrid, vertices)
 
 import Dict exposing (Dict)
 import Random
@@ -449,7 +449,7 @@ buildRoute adjacencyList minAcceptableLength startVertexId =
 carveLoops : GeneratorState -> VertexId -> GeneratorState
 carveLoops ({ adjacencyList } as initialState) startVertexId =
     let
-        findDeadEnds depth sourceVertexId vertexId =
+        findDeadEnds sourceVertexId vertexId =
             let
                 directions =
                     adjacencyList
@@ -459,15 +459,15 @@ carveLoops ({ adjacencyList } as initialState) startVertexId =
                         |> List.filter ((/=) sourceVertexId)
             in
             if List.isEmpty directions then
-                [ ( depth, vertexId ) ]
+                [ vertexId ]
 
             else
-                List.concatMap (findDeadEnds (depth + 1) vertexId) directions
+                List.concatMap (findDeadEnds vertexId) directions
 
         deadEnds =
-            findDeadEnds 0 -1 startVertexId
+            findDeadEnds -1 startVertexId
 
-        carveLoop ( deadEnd, depth ) state =
+        carveLoop deadEnd state =
             let
                 targetsGenerator =
                     state.adjacencyList

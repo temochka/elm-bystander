@@ -1,4 +1,4 @@
-module Game exposing (new, subscriptions, update)
+module Game exposing (new, newAs, subscriptions, update)
 
 import Browser.Events as Events
 import Html.Events as Events

@@ -15,6 +15,9 @@ namespace :deploy do
   task build: :build_clean do
     run_locally do
       execute :elm, 'make', 'src/Main.elm', '--output', 'public/index.html', '--optimize'
+      %w(One Two Three Four Five).each do |step|
+        execute :elm, 'make', "src/Step#{step}.elm", '--output', "public/step-#{step.downcase}.html", '--optimize'
+      end
     end
   end
 
