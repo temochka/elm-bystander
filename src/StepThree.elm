@@ -3,7 +3,9 @@ module StepThree exposing (main)
 import Browser
 import Game
 import Html exposing (Html)
-import Maze
+import MazePanel exposing (MazePanel)
+import QuadGraph
+import QuadGraph.Traverse
 import Random
 import Renderer
 import State
@@ -11,38 +13,40 @@ import Time
 
 
 type alias Model =
-    { grid : Maze.Grid
-    , carvedPaths : List (List Maze.VertexId)
-    , start : Maze.VertexId
+    { grid : MazePanel.Grid
+    , carvedPaths : List (List QuadGraph.NodeId)
+    , start : QuadGraph.NodeId
     , step : Int
     , maxStep : Int
     }
 
 
 type Msg
-    = SetStartPoint Maze.VertexId
-    | SetCarvedPaths (List (List Maze.VertexId))
+    = SetStartPoint QuadGraph.NodeId
+    | SetCarvedPaths (List (List QuadGraph.NodeId))
     | Carve
     | RequestStartPoint
 
 
-toPaths : List Maze.VertexId -> Maze.VertexId -> Maze.VertexId -> Maze.AdjacencyList -> List (List Maze.VertexId)
-toPaths path fromVertexId vertexId adjacencyList =
+toPaths : QuadGraph.NodeId -> MazePanel.MazeGraph -> List (List QuadGraph.NodeId)
+toPaths startNodeId graph =
     let
-        children =
-            adjacencyList
-                |> Maze.getAdjacencyRecord vertexId
-                |> Maybe.map Maze.passableDirections
-                |> Maybe.withDefault []
-                |> List.filter ((/=) fromVertexId)
-    in
-    if List.isEmpty children then
-        [ path ]
+        reducer path nodeId acc =
+            let
+                connectionsCount =
+                    nodeId
+                        |> QuadGraph.get graph
+                        |> Maybe.map MazePanel.connectedNodes
+                        |> Maybe.withDefault []
+                        |> List.length
+            in
+            if connectionsCount <= 1 then
+                (nodeId :: path) :: acc
 
-    else
-        children
-            |> List.map (\v -> toPaths (v :: path) vertexId v adjacencyList)
-            |> List.concat
+            else
+                acc
+    in
+    QuadGraph.Traverse.foldDepthFirst reducer [] (QuadGraph.Foldable identity startNodeId graph)
 
 
 main =
@@ -51,7 +55,7 @@ main =
 
 init : () -> ( Model, Cmd Msg )
 init _ =
-    ( { grid = Maze.new 5 5
+    ( { grid = MazePanel.newGrid 5 5
       , carvedPaths = []
       , start = 0
       , step = 10
@@ -73,7 +77,7 @@ view { grid, start, carvedPaths, step } =
                 |> List.map (Renderer.pathOnGrid dimensions)
                 |> List.concatMap (Renderer.renderPath dimensions Renderer.pathColor Nothing)
     in
-    Renderer.renderEdges dimensions Renderer.gridColor (Maze.edges grid)
+    Renderer.renderEdges dimensions Renderer.gridColor (QuadGraph.edges grid.graph)
         ++ Renderer.renderStartNode dimensions start
         ++ paths
         |> Renderer.board
@@ -91,22 +95,14 @@ update msg model =
 
         SetStartPoint start ->
             let
-                carver seed =
-                    start
-                        |> Maze.carvePaths -1
-                        |> State.finalState { adjacencyList = model.grid.adjacencyList, currentSeed = seed }
-                        |> .adjacencyList
-
                 generator =
-                    Random.int 0 999999
-                        |> Random.map Random.initialSeed
-                        |> Random.map carver
-                        |> Random.map (toPaths [ start ] -1 start)
+                    MazePanel.carvePaths model.grid.graph start
+                        |> Random.map (toPaths start)
             in
             ( { model | start = start }, Random.generate SetCarvedPaths generator )
 
         RequestStartPoint ->
-            ( model, Random.generate SetStartPoint (Maze.randomStartPoint model.grid.adjacencyList) )
+            ( model, Random.generate SetStartPoint (MazePanel.randomStartPoint model.grid.graph) )
 
         Carve ->
             if model.step >= model.maxStep + 10 then

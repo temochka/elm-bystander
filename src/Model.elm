@@ -1,6 +1,7 @@
 module Model exposing (Animation(..), GameState(..), Level, Model, Msg(..), Player(..))
 
-import Maze
+import MazePanel exposing (MazePanel)
+import QuadGraph
 import Random
 import Time
 
@@ -16,8 +17,8 @@ type alias Level =
 
 type GameState
     = Loading
-    | Playing Player Maze.Game
-    | Completed Player Maze.Game
+    | Playing Player MazePanel
+    | Completed Player MazePanel
 
 
 type Animation
@@ -25,8 +26,7 @@ type Animation
 
 
 type alias Model =
-    { maze : Maze.Grid
-    , gameState : GameState
+    { gameState : GameState
     , animations : List Animation
     , player : Player
     , level : Level
@@ -38,9 +38,8 @@ type alias Model =
 
 
 type Msg
-    = UpdateMaze Maze.Grid
-    | SetGame ( Maze.Grid, Maze.Game )
-    | KeyPress (Maybe Maze.Direction)
+    = SetGame MazePanel
+    | KeyPress (Maybe QuadGraph.Direction)
     | AiMove Time.Posix
     | NewGame
     | NextLevel

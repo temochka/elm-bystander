@@ -3,8 +3,9 @@ module Renderer exposing (board, getDimensions, gridColor, objects, pathColor, p
 import Html exposing (Html, button, div, span, text)
 import Html.Attributes exposing (style)
 import Html.Events exposing (onClick)
-import Maze
+import MazePanel
 import Model exposing (..)
+import QuadGraph
 import Svg
 import Svg.Attributes
 
@@ -19,7 +20,7 @@ type alias Dimensions =
     }
 
 
-getDimensions : Maze.Grid -> Dimensions
+getDimensions : MazePanel.Grid -> Dimensions
 getDimensions { width, height } =
     let
         maxCellWidth =
@@ -73,27 +74,27 @@ canvasSide =
     100
 
 
-finishingDirection : Maze.Direction -> ( Int, Int )
+finishingDirection : QuadGraph.Direction -> ( Int, Int )
 finishingDirection direction =
     case direction of
-        Maze.North ->
+        QuadGraph.North ->
             ( 0, -1 )
 
-        Maze.East ->
+        QuadGraph.East ->
             ( 1, 0 )
 
-        Maze.South ->
+        QuadGraph.South ->
             ( 0, 1 )
 
-        Maze.West ->
+        QuadGraph.West ->
             ( -1, 0 )
 
 
-renderStartNode : Dimensions -> Maze.VertexId -> List (Html msg)
+renderStartNode : Dimensions -> QuadGraph.NodeId -> List (Html msg)
 renderStartNode { width, height, cellWidth, paddingTop, paddingLeft, strokeWidth } startVertexId =
     let
         ( row, col ) =
-            Maze.vertexIdOnGrid width startVertexId
+            MazePanel.nodePositionOnGrid width startVertexId
     in
     [ Svg.circle
         [ Svg.Attributes.cx (String.fromFloat (paddingLeft + cellWidth * toFloat col))
@@ -105,24 +106,24 @@ renderStartNode { width, height, cellWidth, paddingTop, paddingLeft, strokeWidth
     ]
 
 
-renderTail : Dimensions -> Maze.VertexId -> Maze.Direction -> String -> List (Html Msg)
+renderTail : Dimensions -> QuadGraph.NodeId -> QuadGraph.Direction -> String -> List (Html Msg)
 renderTail { width, paddingLeft, paddingTop, cellWidth, strokeWidth } endVertexId finishingMove color =
     endVertexId
-        |> Maze.vertexIdOnGrid width
+        |> MazePanel.nodePositionOnGrid width
         |> appendix paddingLeft paddingTop cellWidth strokeWidth color (finishingDirection finishingMove)
         |> List.singleton
 
 
-renderEdges : Dimensions -> String -> List Maze.Edge -> List (Html msg)
+renderEdges : Dimensions -> String -> List MazePanel.MazeGraphEdge -> List (Html msg)
 renderEdges { width, height, cellWidth, paddingLeft, paddingTop, strokeWidth } color edges =
     List.concatMap
-        (\(Maze.Edge vertexIdA vertexIdB intact) ->
+        (\(QuadGraph.Edge vertexIdA vertexIdB intact) ->
             let
                 ( rowA, colA ) =
-                    Maze.vertexIdOnGrid width vertexIdA
+                    MazePanel.nodePositionOnGrid width vertexIdA
 
                 ( rowB, colB ) =
-                    Maze.vertexIdOnGrid width vertexIdB
+                    MazePanel.nodePositionOnGrid width vertexIdB
 
                 x1 =
                     cellWidth * toFloat colA
@@ -172,7 +173,7 @@ renderEdges { width, height, cellWidth, paddingLeft, paddingTop, strokeWidth } c
         edges
 
 
-renderPathHead : Dimensions -> List Maze.VertexOnGrid -> List (Html msg)
+renderPathHead : Dimensions -> List MazePanel.NodePositionOnGrid -> List (Html msg)
 renderPathHead { cellWidth, paddingLeft, paddingTop, strokeWidth } path =
     path
         |> List.reverse
@@ -190,7 +191,7 @@ renderPathHead { cellWidth, paddingLeft, paddingTop, strokeWidth } path =
         |> Maybe.withDefault []
 
 
-renderPath : Dimensions -> String -> Maybe String -> List Maze.VertexOnGrid -> List (Html msg)
+renderPath : Dimensions -> String -> Maybe String -> List MazePanel.NodePositionOnGrid -> List (Html msg)
 renderPath ({ cellWidth, paddingLeft, paddingTop, strokeWidth } as dimensions) color blink path =
     [ Svg.g
         [ Svg.Attributes.id "pathAnimation"
@@ -225,28 +226,28 @@ renderPath ({ cellWidth, paddingLeft, paddingTop, strokeWidth } as dimensions) c
     ]
 
 
-pathOnGrid : Dimensions -> List Maze.VertexId -> List Maze.VertexOnGrid
+pathOnGrid : Dimensions -> List QuadGraph.NodeId -> List MazePanel.NodePositionOnGrid
 pathOnGrid dimensions =
-    List.map (Maze.vertexIdOnGrid dimensions.width)
+    List.map (MazePanel.nodePositionOnGrid dimensions.width)
 
 
 objects : Dimensions -> Model -> List (Html Msg)
-objects dimensions { gameState, animations, maze } =
+objects dimensions { gameState, animations } =
     case gameState of
         Loading ->
             []
 
         Playing _ game ->
             renderStartNode dimensions game.start
-                ++ renderEdges dimensions gridColor (Maze.edges maze)
+                ++ renderEdges dimensions gridColor (QuadGraph.edges game.grid.graph)
                 ++ renderTail dimensions game.end game.finishingMove gridColor
-                ++ renderPath dimensions pathColor (List.head animations |> Maybe.map (\(BlinkPath color) -> color)) (pathOnGrid dimensions game.path)
+                ++ renderPath dimensions pathColor (List.head animations |> Maybe.map (\(BlinkPath color) -> color)) (pathOnGrid dimensions game.playerPath)
 
         Completed _ game ->
             renderStartNode dimensions game.start
-                ++ renderEdges dimensions gridColor (Maze.edges maze)
+                ++ renderEdges dimensions gridColor (QuadGraph.edges game.grid.graph)
                 ++ renderTail dimensions game.end game.finishingMove pathColor
-                ++ renderPath dimensions completedPathColor Nothing (pathOnGrid dimensions game.path)
+                ++ renderPath dimensions completedPathColor Nothing (pathOnGrid dimensions game.playerPath)
                 ++ renderTail dimensions game.end game.finishingMove completedPathColor
 
 
@@ -269,7 +270,7 @@ board entities =
         )
 
 
-appendix : Float -> Float -> Float -> Float -> String -> ( Int, Int ) -> Maze.VertexOnGrid -> Html msg
+appendix : Float -> Float -> Float -> Float -> String -> ( Int, Int ) -> MazePanel.NodePositionOnGrid -> Html msg
 appendix paddingLeft paddingTop cellWidth strokeWidth strokeColor ( tailVectorX, tailVectorY ) ( row, col ) =
     Svg.line
         [ Svg.Attributes.x1 (String.fromFloat (paddingLeft + (cellWidth * toFloat col)))
@@ -337,8 +338,16 @@ render model =
                 _ ->
                     [ newGameButton "New game ⏎" ]
 
-        dimensions =
-            getDimensions model.maze
+        gameObjects =
+            case model.gameState of
+                Playing _ game ->
+                    objects (getDimensions game.grid) model
+
+                Completed _ game ->
+                    objects (getDimensions game.grid) model
+
+                _ ->
+                    []
     in
     Html.div
         [ style "position" "absolute"
@@ -353,5 +362,5 @@ render model =
             [ style "margin" "5vmin auto"
             , style "width" "80vmin"
             ]
-            (board (objects dimensions model) :: buttons)
+            (board gameObjects :: buttons)
         ]

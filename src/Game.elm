@@ -3,8 +3,9 @@ module Game exposing (new, newAs, subscriptions, update)
 import Browser.Events as Events
 import Html.Events as Events
 import Json.Decode as Decode
-import Maze
+import MazePanel exposing (MazePanel)
 import Model exposing (..)
+import QuadGraph
 import Random
 import Time
 
@@ -14,32 +15,32 @@ cursorKeyDecoder =
     Decode.map (KeyPress << toDirection) (Decode.field "key" Decode.string)
 
 
-toDirection : String -> Maybe Maze.Direction
+toDirection : String -> Maybe QuadGraph.Direction
 toDirection string =
     case string of
         "ArrowLeft" ->
-            Just Maze.West
+            Just QuadGraph.West
 
         "a" ->
-            Just Maze.West
+            Just QuadGraph.West
 
         "ArrowRight" ->
-            Just Maze.East
+            Just QuadGraph.East
 
         "d" ->
-            Just Maze.East
+            Just QuadGraph.East
 
         "ArrowDown" ->
-            Just Maze.South
+            Just QuadGraph.South
 
         "s" ->
-            Just Maze.South
+            Just QuadGraph.South
 
         "ArrowUp" ->
-            Just Maze.North
+            Just QuadGraph.North
 
         "w" ->
-            Just Maze.North
+            Just QuadGraph.North
 
         _ ->
             Nothing
@@ -65,50 +66,35 @@ menuKeyDecoder =
     Decode.map decoder (Decode.field "key" Decode.string)
 
 
-directionToAccessor : Maybe Maze.Direction -> (Maze.AdjacencyRecord -> Maybe Maze.VertexId)
-directionToAccessor direction =
-    case direction of
-        Just Maze.West ->
-            \record -> record.west |> Maybe.andThen (Maze.passConnectionIf Maze.Intact)
-
-        Just Maze.East ->
-            \record -> record.east |> Maybe.andThen (Maze.passConnectionIf Maze.Intact)
-
-        Just Maze.North ->
-            \record -> record.north |> Maybe.andThen (Maze.passConnectionIf Maze.Intact)
-
-        Just Maze.South ->
-            \record -> record.south |> Maybe.andThen (Maze.passConnectionIf Maze.Intact)
-
-        Nothing ->
-            always Nothing
-
-
-nextAiMove : Maze.Grid -> Maze.Game -> Maybe Maze.Direction
-nextAiMove grid game =
+nextAiMove : MazePanel -> Maybe QuadGraph.Direction
+nextAiMove ({ grid } as game) =
     let
         currentNode =
-            List.head game.path |> Maybe.withDefault game.start
+            List.head game.playerPath |> Maybe.withDefault game.start
 
         nextNode =
-            game.correctPath |> List.drop (max (List.length game.path) 1) |> List.head
+            game.optimalSolution |> List.drop (max (List.length game.playerPath) 1) |> List.head
     in
     case nextNode of
         Nothing ->
             Just game.finishingMove
 
-        Just node ->
-            Maze.getAdjacencyRecord currentNode grid.adjacencyList
-                |> Maybe.andThen (\record -> Maze.getDirection record node)
+        Just nextNodeId ->
+            currentNode
+                |> QuadGraph.get grid.graph
+                |> Maybe.andThen (\node -> QuadGraph.getDirection node nextNodeId)
 
 
-handleMove : Model -> Maze.Game -> Maybe Maze.Direction -> Model
-handleMove ({ player, maze } as model) game direction =
-    case game.path of
+handleMove : Model -> MazePanel -> Maybe QuadGraph.Direction -> Model
+handleMove ({ player } as model) game direction =
+    case game.playerPath of
         currentVertex :: previousVertexes ->
             let
                 potentialNextVertex =
-                    Maze.go maze currentVertex (directionToAccessor direction)
+                    currentVertex
+                        |> QuadGraph.get game.grid.graph
+                        |> Maybe.map2 (QuadGraph.takeDirectionIf identity) direction
+                        |> Maybe.andThen identity
 
                 previousVertex =
                     List.head previousVertexes
@@ -119,13 +105,13 @@ handleMove ({ player, maze } as model) game direction =
             case potentialNextVertex of
                 Just nextVertex ->
                     if potentialNextVertex == previousVertex then
-                        { model | gameState = Playing player { game | path = List.tail game.path |> Maybe.withDefault [] } }
+                        { model | gameState = Playing player { game | playerPath = List.tail game.playerPath |> Maybe.withDefault [] } }
 
-                    else if List.member nextVertex game.path then
+                    else if List.member nextVertex game.playerPath then
                         { model | animations = [ BlinkPath "#89280E" ] }
 
                     else
-                        { model | gameState = Playing player { game | path = nextVertex :: game.path } }
+                        { model | gameState = Playing player { game | playerPath = nextVertex :: game.playerPath } }
 
                 Nothing ->
                     if gameOver then
@@ -145,11 +131,8 @@ update msg modelWithOldAnimations =
             { modelWithOldAnimations | animations = [] }
     in
     case msg of
-        UpdateMaze maze ->
-            ( { model | maze = maze }, Cmd.none )
-
-        SetGame ( grid, game ) ->
-            ( { model | maze = grid, gameState = Playing model.player game }, Cmd.none )
+        SetGame game ->
+            ( { model | gameState = Playing model.player game }, Cmd.none )
 
         KeyPress direction ->
             case model.gameState of
@@ -186,7 +169,7 @@ update msg modelWithOldAnimations =
                 Playing Ai game ->
                     let
                         nextMove =
-                            nextAiMove model.maze game
+                            nextAiMove game
                     in
                     ( handleMove model game nextMove, Cmd.none )
 
@@ -214,11 +197,7 @@ subscriptions model =
 
 newAs : Player -> Level -> () -> ( Model, Cmd Msg )
 newAs player level _ =
-    let
-        maze =
-            Maze.new level level
-    in
-    ( { maze = maze, gameState = Loading, animations = [], level = level, player = player }, Random.generate SetGame (Maze.makeGame maze) )
+    ( { gameState = Loading, animations = [], level = level, player = player }, Random.generate SetGame (MazePanel.new level level) )
 
 
 new =
