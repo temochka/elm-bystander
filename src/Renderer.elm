@@ -183,7 +183,7 @@ renderPathHead { cellWidth, paddingLeft, paddingTop, strokeWidth } path =
                 [ Svg.circle
                     [ Svg.Attributes.cx (String.fromFloat (paddingLeft + cellWidth * toFloat col))
                     , Svg.Attributes.cy (String.fromFloat (paddingTop + cellWidth * toFloat row))
-                    , Svg.Attributes.r (String.fromFloat (cellWidth / 4))
+                    , Svg.Attributes.r (String.fromFloat (cellWidth / 3))
                     ]
                     []
                 ]
@@ -294,14 +294,15 @@ nextLevelButton label enabled =
              else
                 Nop
             )
-        , style "background-color" "#F88B33"
+        , style "background-color" "#51817e"
         , style "border" "none"
-        , style "border-radius" "0.1em"
-        , style "font-family" "Georgia, Times New Roman, serif"
-        , style "font-size" "2em"
+        , style "border-radius" "10px"
+        , style "font-family" "Arial, Helvetica, sans-serif"
+        , style "font-size" "24px"
         , style "color" "#FCF2E8"
         , style "display" "inline-block"
-        , style "padding" "0.2em 0.4em"
+        , style "box-shadow" "0px 5px 0px 0px rgba(13,35,32,1)"
+        , style "padding" "0.4em 0.6em"
         , style "margin-top" "0.5em"
         ]
         [ Html.text label ]
@@ -311,14 +312,15 @@ newGameButton : String -> Html Msg
 newGameButton label =
     Html.button
         [ onClick NewGame
-        , style "background-color" "#F88B33"
+        , style "background-color" "#51817e"
         , style "border" "none"
-        , style "border-radius" "0.1em"
-        , style "font-family" "Georgia, Times New Roman, serif"
-        , style "font-size" "2em"
+        , style "border-radius" "10px"
+        , style "font-family" "Arial, Helvetica, sans-serif"
+        , style "font-size" "24px"
         , style "color" "#FCF2E8"
         , style "display" "inline-block"
-        , style "padding" "0.2em 0.4em"
+        , style "box-shadow" "0px 5px 0px 0px rgba(13,35,32,1)"
+        , style "padding" "0.4em 0.6em"
         , style "margin-top" "0.5em"
         ]
         [ Html.text label ]
@@ -330,13 +332,13 @@ render model =
         buttons =
             case model.gameState of
                 Playing Player _ ->
-                    [ newGameButton "New game ⓡ" ]
+                    []
 
                 Completed Player _ ->
                     [ nextLevelButton "Next Level ⏎" True ]
 
                 _ ->
-                    [ newGameButton "New game ⏎" ]
+                    [ newGameButton "Play ⏎" ]
 
         gameObjects =
             case model.gameState of
