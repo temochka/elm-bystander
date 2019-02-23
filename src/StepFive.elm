@@ -13,13 +13,18 @@ main =
 
 view model =
     let
-        dimensions =
-            Renderer.getDimensions model.maze
+        gameObjects =
+            case model.gameState of
+                Playing _ game ->
+                    Renderer.objects (Renderer.getDimensions game.grid) model
 
-        objects =
-            Renderer.objects dimensions model
+                Completed _ game ->
+                    Renderer.objects (Renderer.getDimensions game.grid) model
+
+                _ ->
+                    []
     in
-    Renderer.board objects
+    Renderer.board gameObjects
 
 
 subscriptions _ =

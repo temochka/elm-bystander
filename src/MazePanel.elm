@@ -221,7 +221,8 @@ buildRoute graph minAcceptableLength startNodeId =
     in
     vertexDistances
         |> Dict.toList
-        |> List.sortBy (Tuple.second >> List.length >> min minAcceptableLength >> (\n -> -n))
+        |> List.sortBy (Tuple.second >> List.length >> min minAcceptableLength)
+        |> List.reverse
         |> List.map Tuple.second
         |> List.filter (\solution -> solution |> List.head |> Maybe.andThen (QuadGraph.get graph >> Maybe.map QuadGraph.isLeaf) |> Maybe.withDefault False)
         |> List.head
