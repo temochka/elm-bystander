@@ -1,18 +1,22 @@
-module QuadGraph exposing (Direction(..), Edge(..), Foldable(..), Node, NodeEdge(..), NodeId, QuadGraph, edges, empty, get, getDirection, insertEdge, insertNode, isLeaf, neighbors, nodeEdges, resolveEdgeIf, stubs, takeDirectionIf, updateEdge)
+module QuadGraph exposing (Direction(..), Edge(..), Foldable(..), Node, NodeId, QuadGraph, edges, empty, get, getDirection, insertEdge, insertNode, isLeaf, neighbors, nodeEdges, resolveEdgeIf, stubs, takeDirectionIf, updateEdge)
 
 import Dict exposing (Dict)
+
+
+
+{- Numeric node ID -}
 
 
 type alias NodeId =
     Int
 
 
+
+{- An edge connecting two nodes holding a value of type e -}
+
+
 type Edge e
     = Edge NodeId NodeId e
-
-
-type NodeEdge e
-    = NodeEdge NodeId e
 
 
 type Direction
@@ -25,10 +29,10 @@ type Direction
 type alias Node a e =
     { id : NodeId
     , value : a
-    , north : Maybe (NodeEdge e)
-    , east : Maybe (NodeEdge e)
-    , south : Maybe (NodeEdge e)
-    , west : Maybe (NodeEdge e)
+    , north : Maybe (Edge e)
+    , east : Maybe (Edge e)
+    , south : Maybe (Edge e)
+    , west : Maybe (Edge e)
     }
 
 
@@ -50,18 +54,18 @@ get graph nodeId =
     Dict.get nodeId graph
 
 
-neighborAccessors : List (Node a e -> Maybe (NodeEdge e))
+neighborAccessors : List (Node a e -> Maybe (Edge e))
 neighborAccessors =
     [ .north, .east, .south, .west ]
 
 
-resolveEdge : NodeEdge e -> NodeId
-resolveEdge (NodeEdge id _) =
+resolveEdge : Edge e -> NodeId
+resolveEdge (Edge _ id _) =
     id
 
 
-resolveEdgeIf : (e -> Bool) -> NodeEdge e -> Maybe NodeId
-resolveEdgeIf f (NodeEdge id val) =
+resolveEdgeIf : (e -> Bool) -> Edge e -> Maybe NodeId
+resolveEdgeIf f (Edge _ id val) =
     if f val then
         Just id
 
@@ -79,7 +83,7 @@ nodeIds graph =
     Dict.keys graph
 
 
-nodeEdges : Node a e -> List (NodeEdge e)
+nodeEdges : Node a e -> List (Edge e)
 nodeEdges node =
     neighborAccessors |> List.filterMap ((|>) node)
 
@@ -96,7 +100,7 @@ edges graph =
                 |> get graph
                 |> Maybe.map nodeEdges
                 |> Maybe.withDefault []
-                |> List.map (\(NodeEdge id val) -> ( ( nodeId, id ), Edge nodeId id val ))
+                |> List.map (\(Edge _ id val) -> ( ( nodeId, id ), Edge nodeId id val ))
 
         reducer ( ( nodeA, nodeB ), edge ) dict =
             if Dict.member ( nodeB, nodeA ) dict then
@@ -147,10 +151,10 @@ stubs node =
         |> List.filterMap identity
 
 
-isConnected : Node a e -> (Node a e -> Maybe (NodeEdge e)) -> NodeId -> Bool
+isConnected : Node a e -> (Node a e -> Maybe (Edge e)) -> NodeId -> Bool
 isConnected node accessor nodeId =
     case accessor node of
-        Just (NodeEdge actualNodeId _) ->
+        Just (Edge _ actualNodeId _) ->
             actualNodeId == nodeId
 
         _ ->
@@ -228,7 +232,7 @@ insertEdge directionAB nodeIdA nodeIdB val graph =
         helper direction nodeId node =
             let
                 edge =
-                    NodeEdge nodeId val
+                    Edge node.id nodeId val
             in
             case direction of
                 North ->
@@ -242,12 +246,6 @@ insertEdge directionAB nodeIdA nodeIdB val graph =
 
                 West ->
                     { node | west = Just edge }
-
-        edgeA =
-            NodeEdge nodeIdB val
-
-        edgeB =
-            NodeEdge nodeIdA val
     in
     graph
         |> Dict.update nodeIdA (Maybe.map (helper directionAB nodeIdB))
@@ -259,16 +257,16 @@ updateEdge nodeIdA nodeIdB val graph =
     let
         helper nodeId node =
             if isConnected node .north nodeId then
-                { node | north = Just (NodeEdge nodeId val) }
+                { node | north = Just (Edge node.id nodeId val) }
 
             else if isConnected node .east nodeId then
-                { node | east = Just (NodeEdge nodeId val) }
+                { node | east = Just (Edge node.id nodeId val) }
 
             else if isConnected node .south nodeId then
-                { node | south = Just (NodeEdge nodeId val) }
+                { node | south = Just (Edge node.id nodeId val) }
 
             else if isConnected node .west nodeId then
-                { node | west = Just (NodeEdge nodeId val) }
+                { node | west = Just (Edge node.id nodeId val) }
 
             else
                 node

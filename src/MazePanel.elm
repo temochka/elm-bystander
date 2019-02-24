@@ -1,4 +1,4 @@
-module MazePanel exposing (Grid, MazeGraph, MazeGraphEdge, MazeGraphNode, MazeGraphNodeEdge, MazePanel, NodePositionOnGrid, carveLoops, carvePaths, connectedNodes, new, newGrid, nodePositionOnGrid, randomStartPoint)
+module MazePanel exposing (Grid, MazeGraph, MazeGraphEdge, MazeGraphNode, MazePanel, NodePositionOnGrid, carveLoops, carvePaths, connectedNodes, new, newGrid, nodePositionOnGrid, randomStartPoint)
 
 import Dict exposing (Dict)
 import QuadGraph exposing (Direction(..), NodeId, QuadGraph)
@@ -13,10 +13,6 @@ import State exposing (State)
 
 type alias MazeGraph =
     QuadGraph () Bool
-
-
-type alias MazeGraphNodeEdge =
-    QuadGraph.NodeEdge Bool
 
 
 type alias MazeGraphEdge =
