@@ -3,16 +3,8 @@ module QuadGraph exposing (Direction(..), Edge(..), Foldable(..), Node, NodeId, 
 import Dict exposing (Dict)
 
 
-
-{- Numeric node ID -}
-
-
 type alias NodeId =
     Int
-
-
-
-{- An edge connecting two nodes holding a value of type e -}
 
 
 type Edge e

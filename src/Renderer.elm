@@ -114,7 +114,7 @@ renderTail { width, paddingLeft, paddingTop, cellWidth, strokeWidth } endVertexI
         |> List.singleton
 
 
-renderEdges : Dimensions -> String -> List MazePanel.MazeGraphEdge -> List (Html msg)
+renderEdges : Dimensions -> String -> List MazePanel.MazeEdge -> List (Html msg)
 renderEdges { width, height, cellWidth, paddingLeft, paddingTop, strokeWidth } color edges =
     List.concatMap
         (\(QuadGraph.Edge vertexIdA vertexIdB intact) ->

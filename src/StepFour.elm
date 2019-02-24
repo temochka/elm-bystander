@@ -15,7 +15,7 @@ import Time
 type alias Model =
     { grid : MazePanel.Grid
     , carvedPaths : List (List QuadGraph.NodeId)
-    , loops : List MazePanel.MazeGraphEdge
+    , loops : List MazePanel.MazeEdge
     , start : QuadGraph.NodeId
     , step : Int
     , maxStep : Int
@@ -24,7 +24,7 @@ type alias Model =
 
 type Msg
     = SetStartPoint QuadGraph.NodeId
-    | SetCarvedPaths ( List (List QuadGraph.NodeId), List MazePanel.MazeGraphEdge )
+    | SetCarvedPaths ( List (List QuadGraph.NodeId), List MazePanel.MazeEdge )
     | Carve
     | RequestStartPoint
 
