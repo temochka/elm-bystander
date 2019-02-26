@@ -298,12 +298,13 @@ nextLevelButton label enabled =
         , style "border" "none"
         , style "border-radius" "10px"
         , style "font-family" "Arial, Helvetica, sans-serif"
-        , style "font-size" "24px"
+        , style "font-size" "23px"
         , style "color" "#FCF2E8"
         , style "display" "inline-block"
-        , style "box-shadow" "0px 5px 0px 0px rgba(13,35,32,1)"
-        , style "padding" "0.4em 0.6em"
+        , style "box-shadow" "0px 3px 0px 0px rgba(13,35,32,1)"
+        , style "padding" "0.6em 0.8em"
         , style "margin-top" "0.5em"
+        , style "font-weight" "bold"
         ]
         [ Html.text label ]
 
@@ -316,12 +317,13 @@ newGameButton label =
         , style "border" "none"
         , style "border-radius" "10px"
         , style "font-family" "Arial, Helvetica, sans-serif"
-        , style "font-size" "24px"
+        , style "font-size" "23px"
         , style "color" "#FCF2E8"
         , style "display" "inline-block"
-        , style "box-shadow" "0px 5px 0px 0px rgba(13,35,32,1)"
-        , style "padding" "0.4em 0.6em"
+        , style "box-shadow" "0px 3px 0px 0px rgba(13,35,32,1)"
+        , style "padding" "0.6em 0.8em"
         , style "margin-top" "0.5em"
+        , style "font-weight" "bold"
         ]
         [ Html.text label ]
 
