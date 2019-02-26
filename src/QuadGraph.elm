@@ -1,4 +1,4 @@
-module QuadGraph exposing (Direction(..), Edge(..), Foldable(..), Node, NodeId, QuadGraph, edges, empty, get, getDirection, insertEdge, insertNode, isLeaf, neighbors, nodeEdges, resolveEdgeIf, stubs, takeDirectionIf, updateEdge)
+module QuadGraph exposing (Direction(..), Edge(..), Foldable(..), Node, NodeId, QuadGraph, edges, empty, get, getDirection, insertEdge, insertNode, isLeaf, neighbors, nodeEdges, nodeIds, resolveEdgeIf, stubs, takeDirectionIf, updateEdge)
 
 import Dict exposing (Dict)
 

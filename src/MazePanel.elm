@@ -1,4 +1,4 @@
-module MazePanel exposing (Grid, MazeGraph, MazeEdge, MazeGraphNode, MazePanel, NodePositionOnGrid, carveLoops, carvePaths, connectedNodes, new, newGrid, nodePositionOnGrid, randomStartPoint)
+module MazePanel exposing (Grid, MazeEdge, MazeGraph, MazeGraphNode, MazePanel, NodePositionOnGrid, carveLoops, carvePaths, connectedNodes, new, newGrid, nodePositionOnGrid, randomStartPoint)
 
 import Dict exposing (Dict)
 import QuadGraph exposing (Direction(..), NodeId, QuadGraph)
@@ -119,17 +119,17 @@ nodePositionOnGrid width nodeId =
 randomListElement : a -> List a -> Random.Generator a
 randomListElement default list =
     case list of
-        [] ->
-            Random.constant default
-
         x :: xs ->
             Random.uniform x xs
+
+        _ ->
+            Random.constant default
 
 
 randomStartPoint : MazeGraph -> Random.Generator NodeId
 randomStartPoint graph =
     graph
-        |> Dict.keys
+        |> QuadGraph.nodeIds
         |> randomListElement -1
 
 
@@ -179,7 +179,7 @@ carveLoops inputGraph startNodeId =
         deadEnds =
             findDeadEnds inputGraph startNodeId
 
-        carveLoop deadEnd ( graph, seed ) =
+        carveLoop deadEnd graph =
             let
                 targetsGenerator =
                     deadEnd
@@ -187,23 +187,12 @@ carveLoops inputGraph startNodeId =
                         |> Maybe.map disconnectedNodes
                         |> Maybe.withDefault []
                         |> Random.List.shuffle
-
-                ( shuffledTargets, newSeed ) =
-                    Random.step targetsGenerator seed
-
-                updatedGraph =
-                    shuffledTargets
-                        |> List.head
-                        |> Maybe.map (\nodeId -> QuadGraph.updateEdge deadEnd nodeId True graph)
-                        |> Maybe.withDefault graph
             in
-            ( updatedGraph, newSeed )
+            targetsGenerator
+                |> Random.map List.head
+                |> Random.map (Maybe.map (\nodeId -> QuadGraph.updateEdge deadEnd nodeId True graph) >> Maybe.withDefault graph)
     in
-    Random.int Random.minInt Random.maxInt
-        |> Random.map Random.initialSeed
-        |> Random.map (Tuple.pair inputGraph)
-        |> Random.map (\init -> List.foldl carveLoop init deadEnds)
-        |> Random.map Tuple.first
+    List.foldl (carveLoop >> Random.andThen) (Random.constant inputGraph) deadEnds
 
 
 buildRoute : MazeGraph -> Int -> NodeId -> List NodeId
